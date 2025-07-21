@@ -15,6 +15,8 @@ export interface User {
   lastLoginAt?: string;
   assignedZoneId?: number;
   assignedZoneName?: string;
+  isTemporaryPassword: boolean; // New field for temporary password status
+  hasCompletedFirstLogin: boolean; // New field to track first login completion
 }
 
 interface AuthContextType {
@@ -22,6 +24,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -85,11 +88,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  const changePassword = async (oldPassword: string, newPassword: string) => {
+    try {
+      setIsLoading(true);
+      
+      const response = await apiService.changePassword(oldPassword, newPassword);
+      
+      // Update user data to reflect password change
+      if (user) {
+        const updatedUser = { 
+          ...user, 
+          isTemporaryPassword: false, 
+          hasCompletedFirstLogin: true 
+        };
+        setUser(updatedUser);
+        await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+      }
+      
+    } catch (error: any) {
+      console.error('Change password error:', error);
+      throw new Error(error.response?.data?.message || 'Kon wachtwoord niet wijzigen');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const value: AuthContextType = {
     user,
     isLoading,
     login,
     logout,
+    changePassword,
     isAuthenticated: !!user,
   };
 

@@ -55,4 +55,11 @@ namespace HoppyRoute.Application.Interfaces
         Task<bool> CompleteRouteStopAsync(int routeStopId);
         Task<List<RouteStopDto>> GetRouteStopsAsync(int routeId);
     }
+
+    public interface IEmailService
+    {
+        Task<bool> SendTemporaryPasswordEmailAsync(string email, string firstName, string lastName, string username, string temporaryPassword);
+        Task<bool> SendPasswordResetEmailAsync(string email, string firstName, string resetLink);
+        Task<bool> SendWelcomeEmailAsync(string email, string firstName, string lastName);
+    }
 }

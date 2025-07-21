@@ -92,16 +92,15 @@ interface UserDto {
   lastLoginAt?: string;
   assignedZoneId?: number;
   assignedZoneName?: string;
+  isTemporaryPassword: boolean; // New field for temporary password status
+  hasCompletedFirstLogin: boolean; // New field to track first login completion
 }
 
 interface CreateUserRequest {
-  username: string;
   email: string;
-  password: string;
-  role: string;
   firstName: string;
   lastName: string;
-  companyId?: number;
+  role: string;
   assignedZones?: number[];
 }
 
@@ -305,6 +304,10 @@ class ApiService {
   async getCurrentUser(): Promise<UserDto> {
     const response: AxiosResponse<UserDto> = await this.api.get('/auth/me');
     return response.data;
+  }
+
+  async changePassword(oldPassword: string, newPassword: string): Promise<void> {
+    await this.api.post('/auth/change-password', { oldPassword, newPassword });
   }
 
   async createUser(userData: CreateUserRequest): Promise<UserDto> {

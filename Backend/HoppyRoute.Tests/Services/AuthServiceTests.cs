@@ -1,10 +1,14 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using FluentAssertions;
 using HoppyRoute.Application.Services;
+using HoppyRoute.Application.DTOs;
+using HoppyRoute.Application.Interfaces;
 using HoppyRoute.Domain.Entities;
 using HoppyRoute.Domain.Enums;
 using HoppyRoute.Infrastructure.Data;
 using Xunit;
+using Moq;
 
 namespace HoppyRoute.Tests.Services
 {
@@ -12,6 +16,8 @@ namespace HoppyRoute.Tests.Services
     {
         private readonly HoppyDbContext _context;
         private readonly AuthService _authService;
+        private readonly Mock<IConfiguration> _mockConfiguration;
+        private readonly Mock<IEmailService> _mockEmailService;
 
         public AuthServiceTests()
         {
@@ -20,11 +26,23 @@ namespace HoppyRoute.Tests.Services
                 .Options;
 
             _context = new HoppyDbContext(options);
-            _authService = new AuthService(_context);
+            
+            // Mock IConfiguration
+            _mockConfiguration = new Mock<IConfiguration>();
+            _mockConfiguration.Setup(c => c["Jwt:Secret"]).Returns("TestSecretKey123!@#$%^&*()_+");
+            _mockConfiguration.Setup(c => c["Jwt:Issuer"]).Returns("TestIssuer");
+            _mockConfiguration.Setup(c => c["Jwt:ExpirationHours"]).Returns("24");
+            
+            // Mock IEmailService
+            _mockEmailService = new Mock<IEmailService>();
+            _mockEmailService.Setup(e => e.SendTemporaryPasswordEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+            
+            _authService = new AuthService(_context, _mockConfiguration.Object, _mockEmailService.Object);
         }
 
         [Fact]
-        public async Task LoginAsync_ValidCredentials_ReturnsUser()
+        public async Task LoginAsync_ValidCredentials_ReturnsLoginResponse()
         {
             // Arrange
             var user = new User
@@ -40,19 +58,26 @@ namespace HoppyRoute.Tests.Services
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
+            var loginRequest = new LoginRequestDto
+            {
+                Username = "testuser",
+                Password = "password123"
+            };
+
             // Act
-            var result = await _authService.LoginAsync("testuser", "password123");
+            var result = await _authService.LoginAsync(loginRequest);
 
             // Assert
             result.Should().NotBeNull();
-            result!.Username.Should().Be("testuser");
-            result.Role.Should().Be(UserRole.Admin);
-            result.FirstName.Should().Be("Test");
-            result.LastName.Should().Be("User");
+            result.User.Username.Should().Be("testuser");
+            result.User.Role.Should().Be(UserRole.Admin);
+            result.User.FirstName.Should().Be("Test");
+            result.User.LastName.Should().Be("User");
+            result.Token.Should().NotBeNullOrEmpty();
         }
 
         [Fact]
-        public async Task LoginAsync_InvalidUsername_ReturnsNull()
+        public async Task LoginAsync_InvalidUsername_ThrowsUnauthorizedException()
         {
             // Arrange
             var user = new User
@@ -68,15 +93,19 @@ namespace HoppyRoute.Tests.Services
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            // Act
-            var result = await _authService.LoginAsync("wronguser", "password123");
+            var loginRequest = new LoginRequestDto
+            {
+                Username = "wronguser",
+                Password = "password123"
+            };
 
-            // Assert
-            result.Should().BeNull();
+            // Act & Assert
+            await FluentActions.Invoking(() => _authService.LoginAsync(loginRequest))
+                .Should().ThrowAsync<UnauthorizedAccessException>();
         }
 
         [Fact]
-        public async Task LoginAsync_InvalidPassword_ReturnsNull()
+        public async Task LoginAsync_InvalidPassword_ThrowsUnauthorizedException()
         {
             // Arrange
             var user = new User
@@ -92,48 +121,76 @@ namespace HoppyRoute.Tests.Services
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            // Act
-            var result = await _authService.LoginAsync("testuser", "wrongpassword");
+            var loginRequest = new LoginRequestDto
+            {
+                Username = "testuser",
+                Password = "wrongpassword"
+            };
 
-            // Assert
-            result.Should().BeNull();
+            // Act & Assert
+            await FluentActions.Invoking(() => _authService.LoginAsync(loginRequest))
+                .Should().ThrowAsync<UnauthorizedAccessException>();
         }
 
         [Fact]
         public async Task CreateUserAsync_ValidData_CreatesUser()
         {
             // Arrange
-            var createUserDto = new HoppyRoute.Application.DTOs.CreateUserDto
+            var adminUser = new User
             {
-                Username = "newuser",
-                Password = "password123",
-                Role = UserRole.Swapper,
-                FirstName = "New",
+                Username = "admin",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("password123"),
+                Role = UserRole.Admin,
+                FirstName = "Admin",
                 LastName = "User",
-                Email = "newuser@example.com"
+                Email = "admin@example.com"
+            };
+
+            _context.Users.Add(adminUser);
+            await _context.SaveChangesAsync();
+
+            var createUserDto = new CreateUserRequestDto
+            {
+                Email = "new.user@example.com",
+                Role = UserRole.BatterySwapper,
+                FirstName = "New",
+                LastName = "User"
             };
 
             // Act
-            var result = await _authService.CreateUserAsync(createUserDto);
+            var result = await _authService.CreateUserAsync(createUserDto, adminUser.Id);
 
             // Assert
             result.Should().NotBeNull();
-            result.Username.Should().Be("newuser");
-            result.Role.Should().Be(UserRole.Swapper);
+            result.Username.Should().Be("new.user"); // Generated username
+            result.Role.Should().Be(UserRole.BatterySwapper);
             result.FirstName.Should().Be("New");
             result.LastName.Should().Be("User");
-            result.Email.Should().Be("newuser@example.com");
+            result.Email.Should().Be("new.user@example.com");
+            result.IsTemporaryPassword.Should().BeTrue();
+            result.HasCompletedFirstLogin.Should().BeFalse();
 
             // Verify user was saved to database
-            var savedUser = await _context.Users.FirstOrDefaultAsync(u => u.Username == "newuser");
+            var savedUser = await _context.Users.FirstOrDefaultAsync(u => u.Username == "new.user");
             savedUser.Should().NotBeNull();
-            BCrypt.Net.BCrypt.Verify("password123", savedUser!.PasswordHash).Should().BeTrue();
+            savedUser!.IsTemporaryPassword.Should().BeTrue();
+            savedUser.HasCompletedFirstLogin.Should().BeFalse();
         }
 
         [Fact]
-        public async Task CreateUserAsync_DuplicateUsername_ThrowsException()
+        public async Task CreateUserAsync_DuplicateEmail_ThrowsException()
         {
             // Arrange
+            var adminUser = new User
+            {
+                Username = "admin",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("password123"),
+                Role = UserRole.Admin,
+                FirstName = "Admin",
+                LastName = "User",
+                Email = "admin@example.com"
+            };
+
             var existingUser = new User
             {
                 Username = "testuser",
@@ -144,48 +201,194 @@ namespace HoppyRoute.Tests.Services
                 Email = "test@example.com"
             };
 
-            _context.Users.Add(existingUser);
+            _context.Users.AddRange(adminUser, existingUser);
             await _context.SaveChangesAsync();
 
-            var createUserDto = new HoppyRoute.Application.DTOs.CreateUserDto
+            var createUserDto = new CreateUserRequestDto
             {
-                Username = "testuser", // Same username
-                Password = "password123",
-                Role = UserRole.Swapper,
+                Email = "test@example.com", // Same email
+                Role = UserRole.BatterySwapper,
                 FirstName = "New",
-                LastName = "User",
-                Email = "newuser@example.com"
+                LastName = "User"
             };
 
             // Act & Assert
-            await FluentActions.Invoking(() => _authService.CreateUserAsync(createUserDto))
-                .Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage("*gebruikersnaam*");
+            await FluentActions.Invoking(() => _authService.CreateUserAsync(createUserDto, adminUser.Id))
+                .Should().ThrowAsync<ArgumentException>()
+                .WithMessage("*E-mailadres*");
         }
 
         [Fact]
-        public async Task GetUsersAsync_ReturnsAllUsers()
+        public async Task CreateUserAsync_NonAdminUser_ThrowsUnauthorizedException()
+        {
+            // Arrange
+            var fleetManagerUser = new User
+            {
+                Username = "fleetmanager",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("password123"),
+                Role = UserRole.FleetManager,
+                FirstName = "Fleet",
+                LastName = "Manager",
+                Email = "fleetmanager@example.com"
+            };
+
+            _context.Users.Add(fleetManagerUser);
+            await _context.SaveChangesAsync();
+
+            var createUserDto = new CreateUserRequestDto
+            {
+                Email = "new.user@example.com",
+                Role = UserRole.BatterySwapper,
+                FirstName = "New",
+                LastName = "User"
+            };
+
+            // Act & Assert
+            await FluentActions.Invoking(() => _authService.CreateUserAsync(createUserDto, fleetManagerUser.Id))
+                .Should().ThrowAsync<UnauthorizedAccessException>()
+                .WithMessage("*administrator*");
+        }
+
+        [Fact]
+        public async Task LoginAsync_TemporaryPasswordExpired_ThrowsUnauthorizedException()
+        {
+            // Arrange
+            var user = new User
+            {
+                Username = "testuser",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("temppassword123"),
+                Role = UserRole.BatterySwapper,
+                FirstName = "Test",
+                LastName = "User",
+                Email = "test@example.com",
+                IsTemporaryPassword = true,
+                HasCompletedFirstLogin = false,
+                TemporaryPasswordExpiresAt = DateTime.UtcNow.AddDays(-1) // Expired yesterday
+            };
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            var loginRequest = new LoginRequestDto
+            {
+                Username = "testuser",
+                Password = "temppassword123"
+            };
+
+            // Act & Assert
+            await FluentActions.Invoking(() => _authService.LoginAsync(loginRequest))
+                .Should().ThrowAsync<UnauthorizedAccessException>()
+                .WithMessage("*verlopen*");
+        }
+
+        [Fact]
+        public async Task ChangePasswordAsync_TemporaryPassword_UpdatesFields()
+        {
+            // Arrange
+            var user = new User
+            {
+                Username = "testuser",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("temppassword123"),
+                Role = UserRole.BatterySwapper,
+                FirstName = "Test",
+                LastName = "User",
+                Email = "test@example.com",
+                IsTemporaryPassword = true,
+                HasCompletedFirstLogin = false,
+                TemporaryPasswordExpiresAt = DateTime.UtcNow.AddDays(7)
+            };
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            var changePasswordRequest = new ChangePasswordRequestDto
+            {
+                CurrentPassword = "temppassword123",
+                NewPassword = "newpassword123"
+            };
+
+            // Act
+            var result = await _authService.ChangePasswordAsync(user.Id, changePasswordRequest);
+
+            // Assert
+            result.Should().BeTrue();
+
+            // Verify password was changed and flags were updated
+            var updatedUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == user.Id);
+            updatedUser.Should().NotBeNull();
+            updatedUser!.IsTemporaryPassword.Should().BeFalse();
+            updatedUser.HasCompletedFirstLogin.Should().BeTrue();
+            updatedUser.TemporaryPasswordExpiresAt.Should().BeNull();
+            BCrypt.Net.BCrypt.Verify("newpassword123", updatedUser.PasswordHash).Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task CreateUserAsync_ValidData_CallsEmailService()
+        {
+            // Arrange
+            var adminUser = new User
+            {
+                Username = "admin",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("password123"),
+                Role = UserRole.Admin,
+                FirstName = "Admin",
+                LastName = "User",
+                Email = "admin@example.com"
+            };
+
+            _context.Users.Add(adminUser);
+            await _context.SaveChangesAsync();
+
+            var createUserDto = new CreateUserRequestDto
+            {
+                Email = "new.user@example.com",
+                Role = UserRole.BatterySwapper,
+                FirstName = "New",
+                LastName = "User"
+            };
+
+            // Act
+            var result = await _authService.CreateUserAsync(createUserDto, adminUser.Id);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Username.Should().Be("new.user");
+            result.Email.Should().Be("new.user@example.com");
+            result.Role.Should().Be(UserRole.BatterySwapper);
+
+            // Verify email service was called
+            _mockEmailService.Verify(e => e.SendTemporaryPasswordEmailAsync(
+                "new.user@example.com",
+                "New",
+                "User",
+                "new.user",
+                It.IsAny<string>()
+            ), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetUsersByRoleAsync_ReturnsUsersWithRole()
         {
             // Arrange
             var users = new[]
             {
                 new User
                 {
-                    Username = "user1",
+                    Username = "admin1",
                     PasswordHash = BCrypt.Net.BCrypt.HashPassword("password123"),
                     Role = UserRole.Admin,
-                    FirstName = "User",
+                    FirstName = "Admin",
                     LastName = "One",
-                    Email = "user1@example.com"
+                    Email = "admin1@example.com"
                 },
                 new User
                 {
-                    Username = "user2",
+                    Username = "swapper1",
                     PasswordHash = BCrypt.Net.BCrypt.HashPassword("password123"),
-                    Role = UserRole.Swapper,
-                    FirstName = "User",
-                    LastName = "Two",
-                    Email = "user2@example.com"
+                    Role = UserRole.BatterySwapper,
+                    FirstName = "Swapper",
+                    LastName = "One",
+                    Email = "swapper1@example.com"
                 }
             };
 
@@ -193,12 +396,12 @@ namespace HoppyRoute.Tests.Services
             await _context.SaveChangesAsync();
 
             // Act
-            var result = await _authService.GetUsersAsync();
+            var result = await _authService.GetUsersByRoleAsync(UserRole.Admin);
 
             // Assert
-            result.Should().HaveCount(2);
-            result.Should().Contain(u => u.Username == "user1");
-            result.Should().Contain(u => u.Username == "user2");
+            result.Should().HaveCount(1);
+            result.First().Username.Should().Be("admin1");
+            result.First().Role.Should().Be(UserRole.Admin);
         }
 
         [Fact]
@@ -220,7 +423,7 @@ namespace HoppyRoute.Tests.Services
                 {
                     Username = "user2",
                     PasswordHash = BCrypt.Net.BCrypt.HashPassword("password123"),
-                    Role = UserRole.Swapper,
+                    Role = UserRole.BatterySwapper,
                     FirstName = "User",
                     LastName = "Two",
                     Email = "user2@example.com"
@@ -238,7 +441,7 @@ namespace HoppyRoute.Tests.Services
         }
 
         [Fact]
-        public async Task DeleteUserAsync_ExistingUser_DeletesUser()
+        public async Task DeactivateUserAsync_ExistingUser_DeactivatesUser()
         {
             // Arrange
             var user = new User
@@ -248,28 +451,30 @@ namespace HoppyRoute.Tests.Services
                 Role = UserRole.Admin,
                 FirstName = "Test",
                 LastName = "User",
-                Email = "test@example.com"
+                Email = "test@example.com",
+                IsActive = true
             };
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
             // Act
-            var result = await _authService.DeleteUserAsync(user.Id);
+            var result = await _authService.DeactivateUserAsync(user.Id);
 
             // Assert
             result.Should().BeTrue();
 
-            // Verify user was deleted from database
-            var deletedUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == user.Id);
-            deletedUser.Should().BeNull();
+            // Verify user was deactivated in database
+            var deactivatedUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == user.Id);
+            deactivatedUser.Should().NotBeNull();
+            deactivatedUser!.IsActive.Should().BeFalse();
         }
 
         [Fact]
-        public async Task DeleteUserAsync_NonExistingUser_ReturnsFalse()
+        public async Task DeactivateUserAsync_NonExistingUser_ReturnsFalse()
         {
             // Act
-            var result = await _authService.DeleteUserAsync(999);
+            var result = await _authService.DeactivateUserAsync(999);
 
             // Assert
             result.Should().BeFalse();

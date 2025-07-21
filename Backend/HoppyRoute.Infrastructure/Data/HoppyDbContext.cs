@@ -107,6 +107,9 @@ namespace HoppyRoute.Infrastructure.Data
                 entity.Property(e => e.LastName).HasMaxLength(100);
                 entity.Property(e => e.IsActive).IsRequired();
                 entity.Property(e => e.CreatedAt).IsRequired();
+                entity.Property(e => e.IsTemporaryPassword).IsRequired().HasDefaultValue(false);
+                entity.Property(e => e.HasCompletedFirstLogin).IsRequired().HasDefaultValue(false);
+                entity.Property(e => e.TemporaryPasswordExpiresAt).IsRequired(false);
 
                 // Unique constraints
                 entity.HasIndex(e => e.Username).IsUnique();

@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
+import FirstLoginScreen from '../screens/FirstLoginScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import RoutesScreen from '../screens/RoutesScreen';
 import RouteDetailsScreen from '../screens/RouteDetailsScreen';
@@ -74,8 +75,8 @@ function BottomTabNavigator() {
   
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
+      screenOptions={({ route }: { route: any }) => ({
+        tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => {
           const iconName = getTabIcon(route.name, focused);
           return <Ionicons name={iconName} size={size} color={color} />;
         },
@@ -90,7 +91,7 @@ function BottomTabNavigator() {
         },
         headerStyle: {
           backgroundColor: HoppyColors.primary,
-          shadowColor: HoppyColors.gray300,
+          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
         },
         headerTintColor: HoppyColors.white,
         headerTitleStyle: {
@@ -175,35 +176,48 @@ export default function RootNavigator() {
       }}
     >
       {user ? (
-        // User is authenticated - show main app
-        <>
+        // Check if user needs to complete first login
+        user.isTemporaryPassword ? (
+          // Show first login screen for temporary password
           <Stack.Screen 
-            name="Home" 
-            component={BottomTabNavigator} 
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen 
-            name="RouteDetails" 
-            component={RouteDetailsScreen}
+            name="FirstLogin" 
+            component={FirstLoginScreen}
             options={{ 
-              title: 'Route Details',
+              title: 'Eerste Login',
+              headerShown: false, // FirstLogin screen has its own header
             }}
           />
-          <Stack.Screen 
-            name="VehicleDetails" 
-            component={VehicleDetailsScreen}
-            options={{ 
-              title: 'Voertuig Details',
-            }}
-          />
-          <Stack.Screen 
-            name="UserManagement" 
-            component={UserManagementScreen}
-            options={{ 
-              title: 'Gebruikersbeheer',
-            }}
-          />
-        </>
+        ) : (
+          // User is authenticated and has completed first login - show main app
+          <>
+            <Stack.Screen 
+              name="Home" 
+              component={BottomTabNavigator} 
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen 
+              name="RouteDetails" 
+              component={RouteDetailsScreen}
+              options={{ 
+                title: 'Route Details',
+              }}
+            />
+            <Stack.Screen 
+              name="VehicleDetails" 
+              component={VehicleDetailsScreen}
+              options={{ 
+                title: 'Voertuig Details',
+              }}
+            />
+            <Stack.Screen 
+              name="UserManagement" 
+              component={UserManagementScreen}
+              options={{ 
+                title: 'Gebruikersbeheer',
+              }}
+            />
+          </>
+        )
       ) : (
         // User is not authenticated - show login
         <Stack.Screen 

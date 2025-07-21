@@ -48,7 +48,7 @@ namespace HoppyRoute.Tests.Controllers
             // Arrange
             await SeedTestUser();
 
-            var loginRequest = new LoginRequest
+            var loginRequest = new LoginRequestDto
             {
                 Username = "testuser",
                 Password = "Test123!"
@@ -61,7 +61,7 @@ namespace HoppyRoute.Tests.Controllers
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             
             var content = await response.Content.ReadAsStringAsync();
-            var loginResponse = JsonSerializer.Deserialize<LoginResponse>(content, new JsonSerializerOptions
+            var loginResponse = JsonSerializer.Deserialize<LoginResponseDto>(content, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
@@ -78,7 +78,7 @@ namespace HoppyRoute.Tests.Controllers
             // Arrange
             await SeedTestUser();
 
-            var loginRequest = new LoginRequest
+            var loginRequest = new LoginRequestDto
             {
                 Username = "testuser",
                 Password = "wrongpassword"
@@ -95,7 +95,7 @@ namespace HoppyRoute.Tests.Controllers
         public async Task Login_NonExistentUser_ReturnsUnauthorized()
         {
             // Arrange
-            var loginRequest = new LoginRequest
+            var loginRequest = new LoginRequestDto
             {
                 Username = "nonexistent",
                 Password = "Test123!"
@@ -148,11 +148,9 @@ namespace HoppyRoute.Tests.Controllers
             var token = await GetAuthTokenAsync();
             _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
-            var createUserRequest = new CreateUserDto
+            var createUserRequest = new CreateUserRequestDto
             {
-                Username = "newuser",
-                Password = "NewUser123!",
-                Role = UserRole.Swapper,
+                Role = UserRole.BatterySwapper,
                 FirstName = "New",
                 LastName = "User",
                 Email = "newuser@example.com"
@@ -171,28 +169,26 @@ namespace HoppyRoute.Tests.Controllers
             });
 
             createdUser.Should().NotBeNull();
-            createdUser!.Username.Should().Be("newuser");
-            createdUser.Role.Should().Be(UserRole.Swapper);
+            createdUser!.Username.Should().Be("new.user"); // Auto-generated username
+            createdUser.Role.Should().Be(UserRole.BatterySwapper);
             createdUser.FirstName.Should().Be("New");
             createdUser.LastName.Should().Be("User");
             createdUser.Email.Should().Be("newuser@example.com");
         }
 
         [Fact]
-        public async Task CreateUser_WithDuplicateUsername_ReturnsBadRequest()
+        public async Task CreateUser_WithDuplicateEmail_ReturnsBadRequest()
         {
             // Arrange
             var token = await GetAuthTokenAsync();
             _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
-            var createUserRequest = new CreateUserDto
+            var createUserRequest = new CreateUserRequestDto
             {
-                Username = "testuser", // Same as seeded user
-                Password = "NewUser123!",
-                Role = UserRole.Swapper,
-                FirstName = "New",
+                Role = UserRole.BatterySwapper,
+                FirstName = "Test",
                 LastName = "User",
-                Email = "newuser@example.com"
+                Email = "test@example.com" // Same as seeded user
             };
 
             // Act
@@ -249,7 +245,7 @@ namespace HoppyRoute.Tests.Controllers
         {
             await SeedTestUser();
 
-            var loginRequest = new LoginRequest
+            var loginRequest = new LoginRequestDto
             {
                 Username = "testuser",
                 Password = "Test123!"
@@ -259,7 +255,7 @@ namespace HoppyRoute.Tests.Controllers
             response.EnsureSuccessStatusCode();
 
             var content = await response.Content.ReadAsStringAsync();
-            var loginResponse = JsonSerializer.Deserialize<LoginResponse>(content, new JsonSerializerOptions
+            var loginResponse = JsonSerializer.Deserialize<LoginResponseDto>(content, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });

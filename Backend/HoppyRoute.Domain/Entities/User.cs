@@ -34,6 +34,11 @@ namespace HoppyRoute.Domain.Entities
 
         public DateTime? LastLoginAt { get; set; }
 
+        // New fields for temporary password functionality
+        public bool IsTemporaryPassword { get; set; } = false;
+        public bool HasCompletedFirstLogin { get; set; } = false;
+        public DateTime? TemporaryPasswordExpiresAt { get; set; }
+
         // For hierarchy: Fleet Managers created by Admin, Swappers created by Fleet Manager
         public int? CreatedByUserId { get; set; }
         public User? CreatedByUser { get; set; }

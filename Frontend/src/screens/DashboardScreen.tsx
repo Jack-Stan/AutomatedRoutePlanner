@@ -8,16 +8,53 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { CompositeNavigationProp } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { StackNavigationProp } from '@react-navigation/stack';
+import FontAwesome from 'react-native-vector-icons/FontAwesome';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { HoppyColors, HoppyTheme } from '../theme';
 import { apiService, VehicleDto, RouteDto } from '../services/api';
 import { HoppyButton, HoppyLogo } from '../components';
 import { useAuth } from '../contexts/AuthContext';
-import { RootStackParamList } from '../types';
+import { RootStackParamList, BottomTabParamList } from '../types';
 
-type DashboardScreenNavigationProp = StackNavigationProp<RootStackParamList>;
+// Icon component using Font Awesome and Material Icons
+const Icon = ({ name, size = 24, color = HoppyColors.gray600 }: { name: string; size?: number; color?: string }) => {
+  const iconMap: { [key: string]: { component: any; iconName: string } } = {
+    'server': { component: FontAwesome, iconName: 'server' },
+    'people': { component: FontAwesome, iconName: 'users' },
+    'warning': { component: FontAwesome, iconName: 'exclamation-triangle' },
+    'eye': { component: FontAwesome, iconName: 'eye' },
+    'list': { component: FontAwesome, iconName: 'list' },
+    'battery-charging': { component: FontAwesome, iconName: 'battery-half' },
+    'battery-dead': { component: FontAwesome, iconName: 'battery-empty' },
+    'checkmark-circle': { component: FontAwesome, iconName: 'check-circle' },
+    'map': { component: FontAwesome, iconName: 'map' },
+    'calendar': { component: FontAwesome, iconName: 'calendar' },
+    'bicycle': { component: FontAwesome, iconName: 'bicycle' },
+    'location': { component: FontAwesome, iconName: 'map-marker' },
+    'time': { component: FontAwesome, iconName: 'clock-o' },
+    'add-circle': { component: FontAwesome, iconName: 'plus-circle' },
+    'person-add': { component: FontAwesome, iconName: 'user-plus' },
+    'create': { component: FontAwesome, iconName: 'edit' },
+    'analytics': { component: FontAwesome, iconName: 'bar-chart' },
+    'document-text': { component: FontAwesome, iconName: 'file-text' },
+    'alert-circle-outline': { component: FontAwesome, iconName: 'exclamation-circle' },
+    'person': { component: FontAwesome, iconName: 'user' },
+  };
+
+  const iconConfig = iconMap[name] || { component: FontAwesome, iconName: 'circle' };
+  const IconComponent = iconConfig.component;
+
+  return <IconComponent name={iconConfig.iconName} size={size} color={color} />;
+};
+
+type DashboardScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<BottomTabParamList, 'Dashboard'>,
+  StackNavigationProp<RootStackParamList>
+>;
 
 export default function DashboardScreen() {
   const { user, logout } = useAuth();
@@ -34,7 +71,7 @@ export default function DashboardScreen() {
     type: string;
     message: string;
     timestamp: Date;
-    icon: keyof typeof Ionicons.glyphMap;
+    icon: string;
     color: string;
   }>>([]);
 
@@ -102,7 +139,7 @@ export default function DashboardScreen() {
         type: 'system',
         message: 'Systeem backup voltooid',
         timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-        icon: 'server' as keyof typeof Ionicons.glyphMap,
+        icon: 'server',
         color: HoppyColors.success,
       });
       
@@ -112,7 +149,7 @@ export default function DashboardScreen() {
           type: 'user',
           message: `${activeUsersCount} actieve gebruikers`,
           timestamp: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
-          icon: 'people' as keyof typeof Ionicons.glyphMap,
+          icon: 'people',
           color: HoppyColors.primary,
         });
       }
@@ -123,7 +160,7 @@ export default function DashboardScreen() {
           type: 'alert',
           message: `${criticalBatteryVehicles.length} voertuigen met kritieke batterij`,
           timestamp: new Date(Date.now() - 15 * 60 * 1000), // 15 minutes ago
-          icon: 'warning' as keyof typeof Ionicons.glyphMap,
+          icon: 'warning',
           color: HoppyColors.error,
         });
       }
@@ -136,7 +173,7 @@ export default function DashboardScreen() {
         type: 'route',
         message: `${activeRoutes.length} routes actief`,
         timestamp: new Date(Date.now() - 10 * 60 * 1000), // 10 minutes ago
-        icon: 'eye' as keyof typeof Ionicons.glyphMap,
+        icon: 'eye',
         color: HoppyColors.info,
       });
     }
@@ -167,7 +204,7 @@ export default function DashboardScreen() {
   }: { 
     title: string; 
     value: string | number; 
-    icon: keyof typeof Ionicons.glyphMap; 
+    icon: string; 
     color?: string;
     onPress?: () => void;
   }) => (
@@ -181,7 +218,7 @@ export default function DashboardScreen() {
           <Text style={styles.statValue}>{value}</Text>
           <Text style={styles.statTitle}>{title}</Text>
         </View>
-        <Ionicons name={icon} size={32} color={color} />
+        <Icon name={icon} size={32} color={color} />
       </View>
     </TouchableOpacity>
   );
@@ -194,7 +231,7 @@ export default function DashboardScreen() {
     disabled = false,
   }: { 
     title: string; 
-    icon: keyof typeof Ionicons.glyphMap; 
+    icon: string; 
     onPress: () => void;
     color?: string;
     disabled?: boolean;
@@ -204,7 +241,7 @@ export default function DashboardScreen() {
       onPress={onPress}
       disabled={disabled}
     >
-      <Ionicons name={icon} size={24} color={disabled ? HoppyColors.gray400 : color} />
+      <Icon name={icon} size={24} color={disabled ? HoppyColors.gray400 : color} />
       <Text style={[styles.actionText, { color: disabled ? HoppyColors.gray400 : color }]}>
         {title}
       </Text>
@@ -223,7 +260,7 @@ export default function DashboardScreen() {
   if (error) {
     return (
       <View style={styles.errorContainer}>
-        <Ionicons name="alert-circle-outline" size={64} color={HoppyColors.error} />
+        <Icon name="alert-circle-outline" size={64} color={HoppyColors.error} />
         <Text style={styles.errorText}>Fout bij laden van dashboard</Text>
         <Text style={styles.errorDetails}>{error}</Text>
         <HoppyButton
@@ -372,25 +409,25 @@ export default function DashboardScreen() {
               <QuickAction
                 title="Mijn Routes"
                 icon="list"
-                onPress={() => Alert.alert('Mijn Routes', 'Bekijk je toegewezen routes voor vandaag')}
+                onPress={() => navigation.navigate('Routes')}
                 color={HoppyColors.primary}
               />
               <QuickAction
-                title="Swap Status"
-                icon="checkmark-circle"
-                onPress={() => Alert.alert('Swap Status', 'Markeer voertuigen als geswapt')}
+                title="Voertuigen"
+                icon="bicycle"
+                onPress={() => navigation.navigate('Vehicles')}
                 color={HoppyColors.success}
               />
               <QuickAction
                 title="Route Voortgang"
                 icon="analytics"
-                onPress={() => Alert.alert('Route Voortgang', `${activeRoutes.length} van ${pendingRoutes.length + activeRoutes.length} stops voltooid`)}
+                onPress={() => navigation.navigate('Routes')}
                 color={HoppyColors.info}
               />
               <QuickAction
-                title="Probleem Melden"
-                icon="warning"
-                onPress={() => Alert.alert('Probleem Melden', 'Meld defect voertuig of voertuig niet gevonden')}
+                title="Instellingen"
+                icon="person"
+                onPress={() => navigation.navigate('Settings')}
                 color={HoppyColors.warning}
               />
             </>
@@ -400,40 +437,28 @@ export default function DashboardScreen() {
           {user?.roleName?.toLowerCase() === 'fleetmanager' && (
             <>
               <QuickAction
-                title="Zone Selecteren"
-                icon="location"
-                onPress={() => Alert.alert('Zone Selectie', 'Kies zone voor route planning (Gent, Brussel, Antwerpen...)')}
+                title="Route Planning"
+                icon="map"
+                onPress={() => navigation.navigate('Routes')}
                 color={HoppyColors.primary}
               />
               <QuickAction
-                title="Duur Instellen"
-                icon="time"
-                onPress={() => Alert.alert('Route Duur', 'Stel shift duur in (4u, 6u, 8u) voor route planning')}
+                title="Voertuigen"
+                icon="bicycle"
+                onPress={() => navigation.navigate('Vehicles')}
                 color={HoppyColors.info}
               />
               <QuickAction
                 title="Route Genereren"
                 icon="add-circle"
-                onPress={() => Alert.alert('Auto Route', 'Genereer automatisch route voor lage batterij voertuigen')}
+                onPress={() => navigation.navigate('Routes')}
                 color={HoppyColors.success}
               />
               <QuickAction
-                title="Route Toewijzen"
-                icon="person-add"
-                onPress={() => Alert.alert('Route Toewijzen', 'Wijs route toe aan specifieke swapper')}
+                title="Instellingen"
+                icon="person"
+                onPress={() => navigation.navigate('Settings')}
                 color={HoppyColors.warning}
-              />
-              <QuickAction
-                title="Route Aanpassen"
-                icon="create"
-                onPress={() => Alert.alert('Route Bewerken', 'Voeg voertuigen toe of verwijder uit route')}
-                color={HoppyColors.gray600}
-              />
-              <QuickAction
-                title="Live Opvolgen"
-                icon="eye"
-                onPress={() => Alert.alert('Live Tracking', 'Volg swappers en route voortgang in real-time')}
-                color={HoppyColors.primary}
               />
             </>
           )}
@@ -450,32 +475,32 @@ export default function DashboardScreen() {
               <QuickAction
                 title="Zone Selecteren"
                 icon="location"
-                onPress={() => Alert.alert('Zone Selectie', 'Kies zone voor route planning')}
+                onPress={() => navigation.navigate('Routes')}
                 color={HoppyColors.primary}
               />
               <QuickAction
                 title="Route Genereren"
                 icon="add-circle"
-                onPress={() => Alert.alert('Auto Route', 'Genereer automatisch route voor lage batterij voertuigen')}
+                onPress={() => navigation.navigate('Routes')}
                 color={HoppyColors.success}
               />
               <QuickAction
-                title="Route Toewijzen"
-                icon="person-add"
-                onPress={() => Alert.alert('Route Toewijzen', 'Wijs route toe aan specifieke swapper')}
+                title="Route Planning"
+                icon="map"
+                onPress={() => navigation.navigate('Routes')}
+                color={HoppyColors.success}
+              />
+              <QuickAction
+                title="Voertuigen"
+                icon="bicycle"
+                onPress={() => navigation.navigate('Vehicles')}
                 color={HoppyColors.warning}
               />
               <QuickAction
-                title="Systeem Overzicht"
-                icon="server"
-                onPress={() => Alert.alert('Systeem Status', 'Bekijk systeem health en performance')}
+                title="Instellingen"
+                icon="person"
+                onPress={() => navigation.navigate('Settings')}
                 color={HoppyColors.info}
-              />
-              <QuickAction
-                title="Rapportages"
-                icon="document-text"
-                onPress={() => Alert.alert('Rapportages', 'Genereer performance en efficiency rapporten')}
-                color={HoppyColors.gray600}
               />
             </>
           )}
@@ -495,7 +520,7 @@ export default function DashboardScreen() {
             <>
               {activeRoutes.slice(0, 2).map((route) => (
                 <View key={route.id} style={styles.activityItem}>
-                  <Ionicons name="checkmark-circle" size={16} color={HoppyColors.success} />
+                  <Icon name="checkmark-circle" size={16} color={HoppyColors.success} />
                   <Text style={styles.activityText}>
                     Route in {route.zoneName} voltooid
                   </Text>
@@ -503,14 +528,14 @@ export default function DashboardScreen() {
               ))}
               {pendingRoutes.slice(0, 2).map((route) => (
                 <View key={`pending-${route.id}`} style={styles.activityItem}>
-                  <Ionicons name="time" size={16} color={HoppyColors.warning} />
+                  <Icon name="time" size={16} color={HoppyColors.warning} />
                   <Text style={styles.activityText}>
                     Nieuwe route toegewezen: {route.zoneName}
                   </Text>
                 </View>
               ))}
               <View style={styles.activityItem}>
-                <Ionicons name="battery-charging" size={16} color={HoppyColors.info} />
+                <Icon name="battery-charging" size={16} color={HoppyColors.info} />
                 <Text style={styles.activityText}>
                   {lowBatteryVehicles.length} voertuigen wachten op swap
                 </Text>
@@ -523,7 +548,7 @@ export default function DashboardScreen() {
             <>
               {activeRoutes.slice(0, 2).map((route) => (
                 <View key={route.id} style={styles.activityItem}>
-                  <Ionicons name="person" size={16} color={HoppyColors.primary} />
+                  <Icon name="person" size={16} color={HoppyColors.primary} />
                   <Text style={styles.activityText}>
                     Route toegewezen aan {route.swapperName}
                   </Text>
@@ -531,14 +556,14 @@ export default function DashboardScreen() {
               ))}
               {pendingRoutes.slice(0, 2).map((route) => (
                 <View key={`pending-${route.id}`} style={styles.activityItem}>
-                  <Ionicons name="create" size={16} color={HoppyColors.info} />
+                  <Icon name="create" size={16} color={HoppyColors.info} />
                   <Text style={styles.activityText}>
                     Route gegenereerd voor {route.zoneName}
                   </Text>
                 </View>
               ))}
               <View style={styles.activityItem}>
-                <Ionicons name="analytics" size={16} color={HoppyColors.success} />
+                <Icon name="analytics" size={16} color={HoppyColors.success} />
                 <Text style={styles.activityText}>
                   Route efficiency: 85% gemiddeld
                 </Text>
@@ -551,7 +576,7 @@ export default function DashboardScreen() {
             <>
               {recentActivities.map((activity) => (
                 <View key={activity.id} style={styles.activityItem}>
-                  <Ionicons name={activity.icon} size={16} color={activity.color} />
+                  <Icon name={activity.icon} size={16} color={activity.color} />
                   <Text style={styles.activityText}>
                     {activity.message}
                   </Text>
@@ -577,7 +602,7 @@ export default function DashboardScreen() {
         <View style={styles.section}>
           <View style={styles.alertContainer}>
             <View style={styles.alertHeader}>
-              <Ionicons name="warning" size={24} color={HoppyColors.error} />
+              <Icon name="warning" size={24} color={HoppyColors.error} />
               <Text style={styles.alertTitle}>Kritieke Batterij Waarschuwing</Text>
             </View>
             <Text style={styles.alertText}>
@@ -586,7 +611,7 @@ export default function DashboardScreen() {
             </Text>
             <TouchableOpacity 
               style={styles.alertButton}
-              onPress={() => Alert.alert('Kritieke Batterij', 'Navigeer naar voertuigen scherm om details te bekijken')}
+              onPress={() => navigation.navigate('Vehicles')}
             >
               <Text style={styles.alertButtonText}>Bekijk Details</Text>
             </TouchableOpacity>
@@ -806,5 +831,14 @@ const styles = StyleSheet.create({
     color: HoppyColors.error,
     fontSize: HoppyTheme.fontSizes.sm,
     fontWeight: '600',
+  },
+  // Icon styles (for fallback if needed)
+  iconContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconText: {
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });

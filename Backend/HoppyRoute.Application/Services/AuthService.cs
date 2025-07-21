@@ -18,14 +18,16 @@ namespace HoppyRoute.Application.Services
     {
         private readonly HoppyDbContext _context;
         private readonly IConfiguration _configuration;
+        private readonly IEmailService _emailService;
         private readonly string _jwtSecret;
         private readonly string _jwtIssuer;
         private readonly int _jwtExpirationHours;
 
-        public AuthService(HoppyDbContext context, IConfiguration configuration)
+        public AuthService(HoppyDbContext context, IConfiguration configuration, IEmailService emailService)
         {
             _context = context;
             _configuration = configuration;
+            _emailService = emailService;
             _jwtSecret = _configuration["Jwt:Secret"] ?? "HoppySecretKey123!@#$%^&*()_+"; // Fallback for development
             _jwtIssuer = _configuration["Jwt:Issuer"] ?? "HoppyApp";
             _jwtExpirationHours = int.Parse(_configuration["Jwt:ExpirationHours"] ?? "24");
@@ -54,6 +56,13 @@ namespace HoppyRoute.Application.Services
                 throw new UnauthorizedAccessException("Ongeldige inloggegevens");
             }
 
+            // Check if temporary password has expired
+            if (user.IsTemporaryPassword && user.TemporaryPasswordExpiresAt.HasValue && 
+                user.TemporaryPasswordExpiresAt.Value < DateTime.UtcNow)
+            {
+                throw new UnauthorizedAccessException("Tijdelijk wachtwoord is verlopen. Neem contact op met een beheerder.");
+            }
+
             // Update last login
             user.LastLoginAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
@@ -77,16 +86,10 @@ namespace HoppyRoute.Application.Services
                 throw new UnauthorizedAccessException("Gebruiker niet gevonden");
             }
 
-            // Verify permissions
-            if (!CanCreateUser(createdByUser.Role, request.Role))
+            // Only admins can create users
+            if (createdByUser.Role != UserRole.Admin)
             {
-                throw new UnauthorizedAccessException("Geen toestemming om deze gebruikersrol aan te maken");
-            }
-
-            // Check if username already exists
-            if (await _context.Users.AnyAsync(u => u.Username == request.Username))
-            {
-                throw new ArgumentException("Gebruikersnaam bestaat al");
+                throw new UnauthorizedAccessException("Alleen administrators kunnen gebruikers aanmaken");
             }
 
             // Check if email already exists
@@ -95,18 +98,27 @@ namespace HoppyRoute.Application.Services
                 throw new ArgumentException("E-mailadres bestaat al");
             }
 
+            // Generate username based on first and last name
+            var username = await GenerateUsernameAsync(request.FirstName, request.LastName);
+            
+            // Generate temporary password
+            var temporaryPassword = GenerateTemporaryPassword();
+            
             var user = new User
             {
-                Username = request.Username,
+                Username = username,
                 Email = request.Email,
-                PasswordHash = HashPassword(request.Password),
+                PasswordHash = HashPassword(temporaryPassword),
                 Role = request.Role,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
                 AssignedZoneId = request.AssignedZoneId,
                 CreatedByUserId = createdByUserId,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                IsTemporaryPassword = true,
+                HasCompletedFirstLogin = false,
+                TemporaryPasswordExpiresAt = DateTime.UtcNow.AddDays(7) // Password expires in 7 days
             };
 
             _context.Users.Add(user);
@@ -116,6 +128,23 @@ namespace HoppyRoute.Application.Services
             user = await _context.Users
                 .Include(u => u.AssignedZone)
                 .FirstAsync(u => u.Id == user.Id);
+
+            // Send email with username and temporary password
+            try
+            {
+                await _emailService.SendTemporaryPasswordEmailAsync(
+                    user.Email,
+                    user.FirstName ?? "User",
+                    user.LastName ?? "User",
+                    user.Username,
+                    temporaryPassword
+                );
+            }
+            catch (Exception ex)
+            {
+                // Log email error but don't fail user creation
+                Console.WriteLine($"Failed to send email to {user.Email}: {ex.Message}");
+            }
 
             return MapToUserDto(user);
         }
@@ -209,6 +238,15 @@ namespace HoppyRoute.Application.Services
             }
 
             user.PasswordHash = HashPassword(request.NewPassword);
+            
+            // If this was a temporary password, mark it as changed
+            if (user.IsTemporaryPassword)
+            {
+                user.IsTemporaryPassword = false;
+                user.HasCompletedFirstLogin = true;
+                user.TemporaryPasswordExpiresAt = null;
+            }
+            
             await _context.SaveChangesAsync();
 
             return true;
@@ -344,8 +382,85 @@ namespace HoppyRoute.Application.Services
                 CreatedAt = user.CreatedAt,
                 LastLoginAt = user.LastLoginAt,
                 AssignedZoneId = user.AssignedZoneId,
-                AssignedZoneName = user.AssignedZone?.Name
+                AssignedZoneName = user.AssignedZone?.Name,
+                IsTemporaryPassword = user.IsTemporaryPassword,
+                HasCompletedFirstLogin = user.HasCompletedFirstLogin
             };
+        }
+
+        private async Task<string> GenerateUsernameAsync(string firstName, string lastName)
+        {
+            // Normalize names (remove accents, convert to lowercase)
+            var normalizedFirstName = NormalizeName(firstName);
+            var normalizedLastName = NormalizeName(lastName);
+            
+            // Create base username
+            var baseUsername = $"{normalizedFirstName}.{normalizedLastName}".ToLower();
+            
+            // Check if username exists
+            var existingUser = await _context.Users
+                .FirstOrDefaultAsync(u => u.Username == baseUsername);
+            
+            if (existingUser == null)
+            {
+                return baseUsername;
+            }
+            
+            // If username exists, add a number suffix
+            var counter = 1;
+            string uniqueUsername;
+            do
+            {
+                uniqueUsername = $"{baseUsername}{counter}";
+                counter++;
+            } while (await _context.Users.AnyAsync(u => u.Username == uniqueUsername));
+            
+            return uniqueUsername;
+        }
+
+        private string NormalizeName(string name)
+        {
+            // Remove special characters and accents
+            var normalized = System.Text.RegularExpressions.Regex.Replace(name, @"[^a-zA-Z]", "");
+            
+            // Convert common accented characters
+            normalized = normalized
+                .Replace("ä", "a").Replace("ë", "e").Replace("ï", "i").Replace("ö", "o").Replace("ü", "u")
+                .Replace("à", "a").Replace("è", "e").Replace("ì", "i").Replace("ò", "o").Replace("ù", "u")
+                .Replace("á", "a").Replace("é", "e").Replace("í", "i").Replace("ó", "o").Replace("ú", "u")
+                .Replace("â", "a").Replace("ê", "e").Replace("î", "i").Replace("ô", "o").Replace("û", "u")
+                .Replace("ç", "c").Replace("ñ", "n");
+            
+            return normalized;
+        }
+
+        private string GenerateTemporaryPassword()
+        {
+            // Generate a secure random password
+            const string chars = "ABCDEFGHJKLMNOPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789!@#$%^&*";
+            var random = new Random();
+            var password = new char[12];
+            
+            // Ensure at least one uppercase, one lowercase, one digit, and one special character
+            password[0] = chars[random.Next(0, 26)]; // uppercase
+            password[1] = chars[random.Next(26, 52)]; // lowercase
+            password[2] = chars[random.Next(52, 62)]; // digit
+            password[3] = chars[random.Next(62, chars.Length)]; // special character
+            
+            // Fill the rest randomly
+            for (int i = 4; i < password.Length; i++)
+            {
+                password[i] = chars[random.Next(chars.Length)];
+            }
+            
+            // Shuffle the password
+            for (int i = password.Length - 1; i > 0; i--)
+            {
+                int j = random.Next(i + 1);
+                (password[i], password[j]) = (password[j], password[i]);
+            }
+            
+            return new string(password);
         }
 
         public async Task<int> GetUsersCountAsync()

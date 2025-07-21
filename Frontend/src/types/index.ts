@@ -85,6 +85,7 @@ export interface PaginatedResponse<T> {
 export type RootStackParamList = {
   Home: undefined;
   Login: undefined;
+  FirstLogin: undefined;
   Routes: undefined;
   RouteDetails: { routeId: number };
   Vehicles: undefined;

@@ -7,25 +7,35 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { CompositeNavigationProp } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { HoppyColors, HoppyTheme, getBatteryColor } from '../theme';
 import { apiService, VehicleDto } from '../services/api';
-import { RootStackParamList } from '../types';
+import { RootStackParamList, BottomTabParamList } from '../types';
 import { HoppyButton, HoppyLogo } from '../components';
+import { useAuth } from '../contexts/AuthContext';
 
-type VehiclesScreenNavigationProp = StackNavigationProp<RootStackParamList>;
+type VehiclesScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<BottomTabParamList, 'Vehicles'>,
+  StackNavigationProp<RootStackParamList>
+>;
 
 export default function VehiclesScreen() {
   const navigation = useNavigation<VehiclesScreenNavigationProp>();
+  const { user } = useAuth();
   const [vehicles, setVehicles] = useState<VehicleDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedZoneId] = useState<number>(1); // Default zone - later from user selection
   const [showLowBatteryOnly, setShowLowBatteryOnly] = useState(false);
+
+  const userRole = user?.roleName?.toLowerCase();
 
   useEffect(() => {
     fetchVehicles();
@@ -63,6 +73,24 @@ export default function VehiclesScreen() {
     if (batteryLevel >= 50) return 'battery-half';
     if (batteryLevel >= 25) return 'battery-charging';
     return 'battery-dead';
+  };
+
+  const handleSwapVehicle = (vehicleId: number) => {
+    Alert.alert(
+      'Batterij Swap',
+      'Markeer deze batterij als vervangen?',
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        { 
+          text: 'Swap Voltooid', 
+          onPress: () => {
+            // In a real app, this would update the vehicle's battery level
+            Alert.alert('Succes', 'Batterij swap gemarkeerd als voltooid!');
+            fetchVehicles(); // Refresh the list
+          }
+        }
+      ]
+    );
   };
 
   const formatLastUpdated = (dateString: string) => {
@@ -110,6 +138,17 @@ export default function VehiclesScreen() {
           </Text>
         </View>
       </View>
+
+      {/* Action buttons for swappers */}
+      {userRole === 'swapper' && item.batteryLevel <= 25 && (
+        <TouchableOpacity
+          style={styles.swapButton}
+          onPress={() => handleSwapVehicle(item.id)}
+        >
+          <Ionicons name="battery-charging-outline" size={16} color={HoppyColors.white} />
+          <Text style={styles.swapButtonText}>Swap Batterij</Text>
+        </TouchableOpacity>
+      )}
     </TouchableOpacity>
   );
 
@@ -340,6 +379,22 @@ const styles = StyleSheet.create({
     marginLeft: HoppyTheme.spacing.sm,
     fontSize: HoppyTheme.fontSizes.sm,
     color: HoppyColors.gray700,
+  },
+  swapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: HoppyColors.success,
+    marginTop: HoppyTheme.spacing.md,
+    paddingVertical: HoppyTheme.spacing.sm,
+    borderRadius: HoppyTheme.borderRadius.md,
+    ...HoppyTheme.shadows.sm,
+  },
+  swapButtonText: {
+    color: HoppyColors.white,
+    fontSize: HoppyTheme.fontSizes.sm,
+    fontWeight: '600',
+    marginLeft: HoppyTheme.spacing.xs,
   },
   emptyContainer: {
     alignItems: 'center',

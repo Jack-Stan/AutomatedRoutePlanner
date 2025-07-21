@@ -5,6 +5,7 @@ using System.Text;
 using HoppyRoute.Infrastructure.Data;
 using HoppyRoute.Application.Interfaces;
 using HoppyRoute.Application.Services;
+using HoppyRoute.Application.Models;
 using HoppyRoute.Domain.Entities;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -42,7 +43,11 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+// Email configuration
+builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
+
 // Register services
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRouteOptimizationService, HoppyRoute.Application.Services.RouteOptimizationService>();
 builder.Services.AddScoped<IRouteService, HoppyRoute.Application.Services.RouteService>();
@@ -346,3 +351,6 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+// Make Program class public for testing
+public partial class Program { }

@@ -14,6 +14,9 @@ namespace HoppyRoute.Infrastructure.Data
         public DbSet<Vehicle> Vehicles { get; set; }
         public DbSet<Route> Routes { get; set; }
         public DbSet<RouteStop> RouteStops { get; set; }
+        public DbSet<User> Users { get; set; }
+        public DbSet<Region> Regions { get; set; }
+        public DbSet<ParkingZone> ParkingZones { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -27,9 +30,15 @@ namespace HoppyRoute.Infrastructure.Data
                 .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Route>()
-                .HasOne(r => r.Swapper)
-                .WithMany(s => s.Routes)
-                .HasForeignKey(r => r.SwapperId)
+                .HasOne(r => r.AssignedSwapper)
+                .WithMany(u => u.AssignedRoutes)
+                .HasForeignKey(r => r.AssignedSwapperId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Route>()
+                .HasOne(r => r.CreatedByUser)
+                .WithMany(u => u.CreatedRoutes)
+                .HasForeignKey(r => r.CreatedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Route>()

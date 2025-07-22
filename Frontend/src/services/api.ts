@@ -100,8 +100,8 @@ interface CreateUserRequest {
   email: string;
   firstName: string;
   lastName: string;
-  role: string;
-  assignedZones?: number[];
+  role: number; // UserRole enum value (0=Admin, 1=FleetManager, 2=BatterySwapper)
+  assignedZoneId?: number;
 }
 
 class ApiService {
@@ -129,12 +129,22 @@ class ApiService {
         // Add authorization header if token exists
         try {
           const token = await AsyncStorage.getItem('authToken');
+          console.log('Auth token found:', token ? 'YES' : 'NO');
           if (token) {
             config.headers.Authorization = `Bearer ${token}`;
+            console.log('Authorization header set with token');
+          } else {
+            console.log('No auth token found in storage');
           }
         } catch (error) {
           console.error('Error getting auth token:', error);
         }
+        console.log('Final request config:', {
+          url: config.url,
+          method: config.method,
+          headers: config.headers,
+          data: config.data
+        });
         return config;
       },
       (error) => Promise.reject(error)
@@ -146,13 +156,25 @@ class ApiService {
         console.log(`API Response: ${response.status} ${response.config.url}`);
         return response;
       },
-      (error) => {
+      async (error) => {
         console.error('API Error:', {
           url: error.config?.url,
           status: error.response?.status,
           data: error.response?.data,
           message: error.message
         });
+
+        // Handle 401 Unauthorized errors - token might be expired or invalid
+        if (error.response?.status === 401) {
+          console.log('401 Unauthorized - removing stored auth data');
+          try {
+            await AsyncStorage.removeItem('authToken');
+            await AsyncStorage.removeItem('userData');
+          } catch (storageError) {
+            console.error('Error clearing auth storage:', storageError);
+          }
+        }
+        
         return Promise.reject(error);
       }
     );
@@ -307,12 +329,25 @@ class ApiService {
   }
 
   async changePassword(oldPassword: string, newPassword: string): Promise<void> {
-    await this.api.post('/auth/change-password', { oldPassword, newPassword });
+    await this.api.post('/auth/users/change-password', { 
+      currentPassword: oldPassword, 
+      newPassword: newPassword 
+    });
   }
 
   async createUser(userData: CreateUserRequest): Promise<UserDto> {
-    const response: AxiosResponse<UserDto> = await this.api.post('/auth/users', userData);
-    return response.data;
+    console.log('createUser - sending request to backend:', userData);
+    try {
+      const response: AxiosResponse<UserDto> = await this.api.post('/auth/users', userData);
+      console.log('createUser - success response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('createUser - error:', error);
+      console.error('createUser - error response:', error.response);
+      console.error('createUser - error status:', error.response?.status);
+      console.error('createUser - error data:', error.response?.data);
+      throw error;
+    }
   }
 
   async getUsers(): Promise<UserDto[]> {
@@ -327,6 +362,25 @@ class ApiService {
 
   async deleteUser(id: number): Promise<void> {
     await this.api.delete(`/auth/users/${id}`);
+  }
+
+  async resetUserPassword(id: number): Promise<{ message: string; temporaryPassword: string }> {
+    const response: AxiosResponse<{ message: string; temporaryPassword: string }> = await this.api.post(`/auth/users/${id}/reset-password`);
+    return response.data;
+  }
+
+  // Password reset functionality
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const response: AxiosResponse<{ message: string }> = await this.api.post('/auth/forgot-password', { email });
+    return response.data;
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    const response: AxiosResponse<{ message: string }> = await this.api.post('/auth/reset-password', { 
+      token, 
+      newPassword 
+    });
+    return response.data;
   }
 
   // Statistics endpoints

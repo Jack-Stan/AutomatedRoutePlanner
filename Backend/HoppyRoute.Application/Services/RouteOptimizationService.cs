@@ -199,5 +199,39 @@ namespace HoppyRoute.Application.Services
         {
             return Math.PI * angle / 180.0;
         }
+
+        public async Task<RouteOptimizationResult> OptimizeRouteWithParkingZonesAsync(List<Vehicle> vehicles, List<ParkingZone> parkingZones, int targetDurationMinutes)
+        {
+            try
+            {
+                if (vehicles.Count == 0 || parkingZones.Count == 0)
+                {
+                    return new RouteOptimizationResult
+                    {
+                        Success = false,
+                        ErrorMessage = "No vehicles or parking zones provided for optimization"
+                    };
+                }
+
+                // For now, use the simple optimization and add parking zone logic later
+                var simpleResult = await OptimizeRouteAsync(vehicles, targetDurationMinutes);
+                
+                // TODO: Implement parking zone specific optimization
+                // This would involve:
+                // 1. Finding optimal pickup points (parking zones with vehicles needing battery replacement)
+                // 2. Finding optimal dropoff points (parking zones with available spaces)
+                // 3. Optimizing the route considering both pickup and dropoff locations
+                
+                return simpleResult;
+            }
+            catch (Exception ex)
+            {
+                return new RouteOptimizationResult
+                {
+                    Success = false,
+                    ErrorMessage = $"Error optimizing route with parking zones: {ex.Message}"
+                };
+            }
+        }
     }
 }

@@ -21,6 +21,9 @@ namespace HoppyRoute.Domain.Entities
         
         public int? ZoneId { get; set; }
         
+        // Current parking zone where the vehicle is located
+        public int? CurrentParkingZoneId { get; set; }
+        
         [Required]
         [Range(-90, 90)]
         public double Latitude { get; set; }
@@ -33,12 +36,21 @@ namespace HoppyRoute.Domain.Entities
         [Range(0, 100)]
         public int BatteryLevel { get; set; }
         
+        // Indicates if battery needs replacement (usually < 20%)
+        public bool NeedsBatteryReplacement { get; set; } = false;
+        
+        // Indicates if vehicle is available for route planning
+        public bool IsAvailable { get; set; } = true;
+        
         [Required]
         public DateTime LastUpdated { get; set; }
         
         // Navigation properties
         [ForeignKey("ZoneId")]
         public virtual Zone? Zone { get; set; }
+        
+        [ForeignKey("CurrentParkingZoneId")]
+        public virtual ParkingZone? CurrentParkingZone { get; set; }
         
         public virtual ICollection<RouteStop> RouteStops { get; set; } = new List<RouteStop>();
     }

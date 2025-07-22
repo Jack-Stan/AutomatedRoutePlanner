@@ -56,6 +56,7 @@ export default function SettingsScreen() {
   );
 
   const handleLogout = () => {
+    console.log('HandleLogout called');
     Alert.alert(
       'Uitloggen',
       'Weet je zeker dat je wilt uitloggen?',
@@ -64,7 +65,10 @@ export default function SettingsScreen() {
         { 
           text: 'Uitloggen', 
           style: 'destructive', 
-          onPress: logout 
+          onPress: () => {
+            console.log('Logout confirmed');
+            logout();
+          }
         }
       ]
     );

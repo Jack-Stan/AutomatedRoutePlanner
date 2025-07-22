@@ -42,12 +42,12 @@ namespace HoppyRouteApi.Controllers
         /// Haal het aantal zones op
         /// </summary>
         [HttpGet("count")]
-        public async Task<ActionResult<int>> GetZonesCount()
+        public async Task<ActionResult<object>> GetZonesCount()
         {
             try
             {
                 var zones = await _zoneService.GetAllZonesAsync();
-                return Ok(zones.Count);
+                return Ok(new { count = zones.Count });
             }
             catch (Exception)
             {

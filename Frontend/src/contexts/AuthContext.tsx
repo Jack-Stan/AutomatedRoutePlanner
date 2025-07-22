@@ -80,9 +80,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const logout = async () => {
     try {
+      console.log('Logging out user...');
       await AsyncStorage.removeItem('authToken');
       await AsyncStorage.removeItem('userData');
       setUser(null);
+      console.log('User logged out successfully');
     } catch (error) {
       console.error('Logout error:', error);
     }

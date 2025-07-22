@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,11 @@ import {
   Modal,
   RefreshControl,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { HoppyColors, HoppyTheme } from '../theme';
-import { HoppyButton, HoppyCard } from '../components';
+import { HoppyButton, HoppyCard, SuccessPopup, EditUserModal } from '../components';
+import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth, User, isAdmin, isFleetManager, getRoleDisplayName } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
 
@@ -26,11 +28,19 @@ interface CreateUserData {
 
 export default function UserManagementScreen() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Success popup state
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [successMessage, setSuccessMessage] = useState({ title: '', message: '' });
+  
   const [newUser, setNewUser] = useState<CreateUserData>({
     email: '',
     firstName: '',
@@ -39,9 +49,46 @@ export default function UserManagementScreen() {
     assignedZones: [],
   });
 
+  // Helper function to map string roles to enum values
+  const mapRoleToEnum = (role: 'fleetmanager' | 'swapper'): number => {
+    switch (role) {
+      case 'fleetmanager':
+        return 1; // FleetManager
+      case 'swapper':
+        return 2; // BatterySwapper
+      default:
+        return 2; // Default to BatterySwapper
+    }
+  };
+
+  // Helper function to show success popup
+  const showSuccess = (title: string, message: string) => {
+    setSuccessMessage({ title, message });
+    setShowSuccessPopup(true);
+  };
+
   useEffect(() => {
     fetchUsers();
+    // Test API connection
+    testApiConnection();
   }, []);
+
+  const testApiConnection = async () => {
+    try {
+      console.log('Testing API connection...');
+      const token = await AsyncStorage.getItem('authToken');
+      const userData = await AsyncStorage.getItem('userData');
+      console.log('Stored auth token:', token ? 'EXISTS' : 'MISSING');
+      console.log('Stored user data:', userData ? 'EXISTS' : 'MISSING');
+      
+      if (userData) {
+        const parsedUser = JSON.parse(userData);
+        console.log('Current user:', parsedUser);
+      }
+    } catch (error) {
+      console.error('Error testing API connection:', error);
+    }
+  };
 
   const fetchUsers = async (isRefresh = false) => {
     try {
@@ -51,10 +98,16 @@ export default function UserManagementScreen() {
         setLoading(true);
       }
       // Use API service to get users
+      console.log('Fetching users...');
       const userData = await apiService.getUsers();
+      console.log('Fetched users:', userData.length, 'users');
+      console.log('Users data:', userData);
       setUsers(userData);
     } catch (error: any) {
       console.error('Error fetching users:', error);
+      console.error('Error response:', error.response);
+      console.error('Error status:', error.response?.status);
+      console.error('Error data:', error.response?.data);
       
       let errorMessage = 'Kon gebruikers niet laden';
       if (error.response?.status === 401) {
@@ -126,18 +179,30 @@ export default function UserManagementScreen() {
       }
 
       // Use API service to create user
+      console.log('Creating user:', newUser);
+      console.log('Mapped role:', mapRoleToEnum(newUser.role));
+      console.log('Request payload:', {
+        email: newUser.email,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        role: mapRoleToEnum(newUser.role),
+        assignedZoneId: newUser.assignedZones?.[0], // Take first assigned zone if any
+      });
       const createdUser = await apiService.createUser({
         email: newUser.email,
         firstName: newUser.firstName,
         lastName: newUser.lastName,
-        role: newUser.role,
-        assignedZones: newUser.assignedZones,
+        role: mapRoleToEnum(newUser.role),
+        assignedZoneId: newUser.assignedZones?.[0], // Take first assigned zone if any
       });
+      console.log('User created successfully:', createdUser);
 
-      Alert.alert(
-        'Gebruiker Aangemaakt', 
-        `Gebruiker succesvol aangemaakt!\n\nEr is een e-mail verzonden naar ${newUser.email} met:\n• Automatisch gegenereerde gebruikersnaam\n• Tijdelijk wachtwoord\n\nDe gebruiker moet bij eerste login een nieuw wachtwoord instellen.`,
-        [{ text: 'OK' }]
+      // Immediately add the new user to the list for instant UI update
+      setUsers(prevUsers => [...prevUsers, createdUser]);
+
+      showSuccess(
+        t('users.created.title'),
+        t('users.created.message', { email: newUser.email })
       );
       
       setShowCreateModal(false);
@@ -148,9 +213,14 @@ export default function UserManagementScreen() {
         role: 'swapper',
         assignedZones: [],
       });
-      fetchUsers();
+      
+      // No need to refresh from server since optimistic update already succeeded
+      console.log('User creation completed successfully with optimistic update');
     } catch (error: any) {
       console.error('Error creating user:', error);
+      
+      // If creation failed, remove the optimistically added user
+      setUsers(prevUsers => prevUsers.filter(u => u.email !== newUser.email));
       
       let errorMessage = 'Kon gebruiker niet aanmaken';
       if (error.response?.data?.message) {
@@ -167,7 +237,17 @@ export default function UserManagementScreen() {
     }
   };
 
-  const handleDeleteUser = (userId: number, userName: string) => {
+  const handleDeleteUser = (userId: number, userName: string, userRole: string) => {
+    // Prevent deleting admin users
+    if (userRole?.toLowerCase() === 'admin') {
+      Alert.alert(
+        'Kan niet verwijderen',
+        'Administrator accounts kunnen niet worden verwijderd om de systeemintegriteit te behouden.',
+        [{ text: 'OK', style: 'default' }]
+      );
+      return;
+    }
+
     Alert.alert(
       'Gebruiker verwijderen',
       `Weet je zeker dat je ${userName} wilt verwijderen?`,
@@ -186,10 +266,19 @@ export default function UserManagementScreen() {
     try {
       // Use API service to delete user
       await apiService.deleteUser(userId);
-      Alert.alert('Succes', 'Gebruiker verwijderd');
-      fetchUsers();
+      
+      // Immediately remove the user from the list for instant UI update
+      setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
+      
+      showSuccess('Gebruiker Verwijderd', 'Gebruiker is succesvol verwijderd.');
+      
+      // No need to refresh from server since optimistic update already succeeded
+      console.log('User deletion completed successfully with optimistic update');
     } catch (error: any) {
       console.error('Error deleting user:', error);
+      
+      // If deletion failed, we need to refresh to restore the user in the list
+      fetchUsers();
       
       let errorMessage = 'Kon gebruiker niet verwijderen';
       if (error.response?.status === 404) {
@@ -205,49 +294,78 @@ export default function UserManagementScreen() {
   };
 
   const handleEditUser = (userData: User) => {
-    const formatDate = (dateString?: string) => {
-      if (!dateString) return 'Nooit';
-      return new Date(dateString).toLocaleDateString('nl-NL', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    };
-
-    const statusText = userData.isActive ? '✅ Actief' : '❌ Inactief';
-    const lastLogin = formatDate(userData.lastLoginAt);
-    const zoneName = userData.assignedZoneName || (userData.assignedZoneId ? `Zone ${userData.assignedZoneId}` : 'Geen zone');
-
-    Alert.alert(
-      'Gebruiker Bewerken',
-      `Gebruiker: ${userData.firstName} ${userData.lastName}\nUsername: ${userData.username}\nRol: ${userData.roleName}\nEmail: ${userData.email}\n\nStatus: ${statusText}\nLaatst ingelogd: ${lastLogin}\nZone: ${zoneName}\n\nAangemaakt: ${formatDate(userData.createdAt)}`,
-      [
-        { text: 'Sluiten', style: 'cancel' },
-        { 
-          text: 'Reset Wachtwoord', 
-          onPress: () => handleResetPassword(userData.email) 
-        },
-        ...(isAdmin(user) ? [{ 
-          text: 'Zone Wijzigen', 
-          onPress: () => handleChangeZone(userData) 
-        }] : [])
-      ]
-    );
+    setSelectedUser(userData);
+    setShowEditModal(true);
   };
 
-  const handleResetPassword = async (email: string) => {
+  const handleResetPassword = async (userId: number) => {
     try {
-      // In a real app, you would call an API endpoint to reset password
-      // For now, we'll just show a confirmation
-      Alert.alert(
+      const result = await apiService.resetUserPassword(userId);
+      showSuccess(
         'Wachtwoord Reset',
-        `Een nieuw tijdelijk wachtwoord is verzonden naar ${email}.\n\nDe gebruiker zal bij de volgende login gevraagd worden om het wachtwoord te wijzigen.`,
-        [{ text: 'OK' }]
+        result.message || 'Nieuw tijdelijk wachtwoord verzonden naar gebruiker.'
       );
-    } catch (error) {
-      Alert.alert('Fout', 'Kon wachtwoord niet resetten');
+    } catch (error: any) {
+      console.error('Error resetting password:', error);
+      
+      let errorMessage = 'Kon wachtwoord niet resetten';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Gebruiker niet gevonden';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'Geen toegang om wachtwoord te resetten';
+      }
+      
+      Alert.alert('Fout', errorMessage);
+    }
+  };
+
+  // Handle saving edited user
+  const handleSaveUser = async (userData: Partial<User>) => {
+    if (!userData.id) return;
+
+    try {
+      const updatedUser = await apiService.updateUser(userData.id, {
+        email: userData.email,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        assignedZoneId: userData.assignedZoneId,
+      });
+
+      // Immediately update the user in the list for instant UI update
+      setUsers(prevUsers => 
+        prevUsers.map(user => 
+          user.id === userData.id ? { ...user, ...updatedUser } : user
+        )
+      );
+
+      showSuccess(
+        'Gebruiker Bijgewerkt',
+        'Gebruikersgegevens zijn succesvol bijgewerkt.'
+      );
+
+      setShowEditModal(false);
+      setSelectedUser(null);
+      
+      // No need to refresh from server since optimistic update already succeeded
+      console.log('User update completed successfully with optimistic update');
+    } catch (error: any) {
+      console.error('Error updating user:', error);
+      
+      // If update failed, refresh to restore original data
+      fetchUsers();
+      
+      let errorMessage = 'Kon gebruiker niet bijwerken';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Gebruiker niet gevonden';
+      } else if (error.response?.status === 409) {
+        errorMessage = 'E-mailadres is al in gebruik';
+      }
+      
+      Alert.alert('Fout', errorMessage);
     }
   };
 
@@ -306,14 +424,17 @@ export default function UserManagementScreen() {
           >
             <Ionicons name="pencil" size={20} color={HoppyColors.primary} />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
-            onPress={() => handleDeleteUser(userData.id, `${userData.firstName} ${userData.lastName}`)}
-            accessibilityLabel={`Verwijder gebruiker ${userData.firstName} ${userData.lastName}`}
-            accessibilityHint="Tik om deze gebruiker te verwijderen"
-          >
-            <Ionicons name="trash" size={20} color={HoppyColors.error} />
-          </TouchableOpacity>
+          {/* Hide delete button for admin users */}
+          {userData.roleName?.toLowerCase() !== 'admin' && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={() => handleDeleteUser(userData.id, `${userData.firstName} ${userData.lastName}`, userData.roleName)}
+              accessibilityLabel={`Verwijder gebruiker ${userData.firstName} ${userData.lastName}`}
+              accessibilityHint="Tik om deze gebruiker te verwijderen"
+            >
+              <Ionicons name="trash" size={20} color={HoppyColors.error} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
       
@@ -512,6 +633,27 @@ export default function UserManagementScreen() {
           </ScrollView>
         </View>
       </Modal>
+
+      {/* Edit User Modal */}
+      <EditUserModal
+        visible={showEditModal}
+        user={selectedUser}
+        onClose={() => {
+          setShowEditModal(false);
+          setSelectedUser(null);
+        }}
+        onSave={handleSaveUser}
+        onResetPassword={handleResetPassword}
+        isAdmin={isAdmin(user)}
+      />
+
+      {/* Success Popup */}
+      <SuccessPopup
+        visible={showSuccessPopup}
+        title={successMessage.title}
+        message={successMessage.message}
+        onClose={() => setShowSuccessPopup(false)}
+      />
     </View>
   );
 }

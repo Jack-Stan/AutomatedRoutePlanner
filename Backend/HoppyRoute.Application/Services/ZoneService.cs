@@ -31,7 +31,9 @@ namespace HoppyRoute.Application.Services
 
         public async Task<ZoneDto?> GetZoneByIdAsync(int zoneId)
         {
-            var zone = await _context.Zones.FindAsync(zoneId);
+            var zone = await _context.Zones
+                .Include(z => z.Region)
+                .FirstOrDefaultAsync(z => z.Id == zoneId);
 
             if (zone == null)
                 return null;
@@ -41,8 +43,54 @@ namespace HoppyRoute.Application.Services
                 Id = zone.Id,
                 Name = zone.Name,
                 CountryCode = zone.CountryCode,
-                GeoJsonBoundary = zone.GeoJsonBoundary
+                GeoJsonBoundary = zone.GeoJsonBoundary,
+                RegionId = zone.RegionId,
+                RegionName = zone.Region?.Name ?? ""
             };
+        }
+
+        public async Task<List<ZoneDto>> GetZonesByRegionAsync(int regionId)
+        {
+            var zones = await _context.Zones
+                .Include(z => z.Region)
+                .Where(z => z.RegionId == regionId)
+                .OrderBy(z => z.Name)
+                .ToListAsync();
+
+            return zones.Select(z => new ZoneDto
+            {
+                Id = z.Id,
+                Name = z.Name,
+                CountryCode = z.CountryCode,
+                GeoJsonBoundary = z.GeoJsonBoundary,
+                RegionId = z.RegionId,
+                RegionName = z.Region?.Name ?? ""
+            }).ToList();
+        }
+
+        public async Task<List<ParkingZoneDto>> GetParkingZonesByZoneAsync(int zoneId)
+        {
+            var parkingZones = await _context.ParkingZones
+                .Include(pz => pz.Zone)
+                .Where(pz => pz.ZoneId == zoneId && pz.IsActive)
+                .OrderBy(pz => pz.Name)
+                .ToListAsync();
+
+            return parkingZones.Select(pz => new ParkingZoneDto
+            {
+                Id = pz.Id,
+                Name = pz.Name,
+                Description = pz.Description,
+                Latitude = pz.Latitude,
+                Longitude = pz.Longitude,
+                RadiusMeters = pz.RadiusMeters,
+                MaxCapacity = pz.MaxCapacity,
+                CurrentVehicleCount = pz.CurrentVehicleCount,
+                IsActive = pz.IsActive,
+                CreatedAt = pz.CreatedAt,
+                ZoneId = pz.ZoneId,
+                ZoneName = pz.Zone?.Name ?? ""
+            }).ToList();
         }
     }
 }

@@ -18,6 +18,8 @@ import { HoppyColors, HoppyTheme } from '../theme';
 import { apiService, VehicleDto, RouteDto } from '../services/api';
 import { HoppyButton, HoppyLogo } from '../components';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
+import LanguageMenu from '../components/LanguageMenu';
 import { RootStackParamList, BottomTabParamList } from '../types';
 
 // Icon component using Font Awesome and Material Icons
@@ -58,6 +60,7 @@ type DashboardScreenNavigationProp = CompositeNavigationProp<
 
 export default function DashboardScreen() {
   const { user, logout } = useAuth();
+  const { t } = useLanguage();
   const navigation = useNavigation<DashboardScreenNavigationProp>();
   const [vehicles, setVehicles] = useState<VehicleDto[]>([]);
   const [routes, setRoutes] = useState<RouteDto[]>([]);
@@ -279,26 +282,18 @@ export default function DashboardScreen() {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.headerText}>
-            <Text style={styles.titleText}>Hoppy Dashboard</Text>
+            <Text style={styles.titleText}>{t('dashboard.title')}</Text>
             <Text style={styles.subtitleText}>
               {user ? getRoleDisplayName(user.roleName) : 'Gebruiker'}
             </Text>
           </View>
-          <TouchableOpacity 
-            style={styles.accountButton}
-            onPress={() => Alert.alert(
-              'Account Menu', 
-              `Ingelogd als: ${user?.username}\nRol: ${user ? getRoleDisplayName(user.roleName) : 'Onbekend'}`, 
-              [
-                { text: 'Annuleren', style: 'cancel' },
-                { text: 'Uitloggen', style: 'destructive', onPress: logout }
-              ]
-            )}
-          >
-            <Text style={styles.accountIcon}>
-              {user?.firstName?.charAt(0)?.toUpperCase() || user?.username?.charAt(0)?.toUpperCase() || 'U'}
-            </Text>
-          </TouchableOpacity>
+          <LanguageMenu
+            userInitial={user?.firstName?.charAt(0)?.toUpperCase() || user?.username?.charAt(0)?.toUpperCase() || 'U'}
+            userName={user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.username}
+            userRole={user ? getRoleDisplayName(user.roleName) : 'Gebruiker'}
+            onLogout={logout}
+            onSettingsPress={() => navigation.navigate('Settings')}
+          />
         </View>
       </View>
 
@@ -308,25 +303,25 @@ export default function DashboardScreen() {
         {user?.roleName?.toLowerCase() === 'swapper' && (
           <>
             <StatCard
-              title="Toegewezen Routes"
+              title={t('dashboard.assignedRoutes') || 'Toegewezen Routes'}
               value={pendingRoutes.length}
               icon="list"
               color={HoppyColors.primary}
             />
             <StatCard
-              title="Te Swappen (<25%)"
+              title={t('dashboard.lowBattery') || 'Te Swappen (<25%)'}
               value={lowBatteryVehicles.length}
               icon="battery-charging"
               color={HoppyColors.warning}
             />
             <StatCard
-              title="Kritiek (<10%)"
+              title={t('dashboard.critical') || 'Kritiek (<10%)'}
               value={criticalBatteryVehicles.length}
               icon="battery-dead"
               color={HoppyColors.error}
             />
             <StatCard
-              title="Voltooid Vandaag"
+              title={t('dashboard.completedToday') || 'Voltooid Vandaag'}
               value={activeRoutes.length}
               icon="checkmark-circle"
               color={HoppyColors.success}
@@ -338,25 +333,25 @@ export default function DashboardScreen() {
         {user?.roleName?.toLowerCase() === 'fleetmanager' && (
           <>
             <StatCard
-              title="Actieve Routes"
+              title={t('dashboard.activeRoutes') || 'Actieve Routes'}
               value={activeRoutes.length}
               icon="map"
               color={HoppyColors.primary}
             />
             <StatCard
-              title="Beschikbare Swappers"
+              title={t('dashboard.availableSwappers') || 'Beschikbare Swappers'}
               value="3" // This would come from API
               icon="people"
               color={HoppyColors.success}
             />
             <StatCard
-              title="Te Plannen Voertuigen"
+              title={t('dashboard.vehiclesToPlan') || 'Te Plannen Voertuigen'}
               value={lowBatteryVehicles.length}
               icon="battery-charging"
               color={HoppyColors.warning}
             />
             <StatCard
-              title="Routes Vandaag"
+              title={t('dashboard.routesToday') || 'Routes Vandaag'}
               value={pendingRoutes.length + activeRoutes.length}
               icon="calendar"
               color={HoppyColors.info}
@@ -368,25 +363,25 @@ export default function DashboardScreen() {
         {user?.roleName?.toLowerCase() === 'admin' && (
           <>
             <StatCard
-              title="Totaal Voertuigen"
+              title={t('dashboard.totalVehicles') || 'Totaal Voertuigen'}
               value={vehicles.length}
               icon="bicycle"
               color={HoppyColors.primary}
             />
             <StatCard
-              title="Actieve Gebruikers"
+              title={t('dashboard.activeUsers') || 'Actieve Gebruikers'}
               value={activeUsersCount}
               icon="people"
               color={HoppyColors.success}
             />
             <StatCard
-              title="Kritieke Batterij"
+              title={t('dashboard.criticalBattery') || 'Kritieke Batterij'}
               value={criticalBatteryVehicles.length}
               icon="battery-dead"
               color={HoppyColors.error}
             />
             <StatCard
-              title="Zones Beheerd"
+              title={t('dashboard.systemZones') || 'Zones Beheerd'}
               value={zonesCount}
               icon="location"
               color={HoppyColors.info}

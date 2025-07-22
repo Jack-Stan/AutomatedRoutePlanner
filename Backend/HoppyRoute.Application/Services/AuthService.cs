@@ -260,6 +260,12 @@ namespace HoppyRoute.Application.Services
                 return false;
             }
 
+            // Prevent deactivating admin users (protect system integrity)
+            if (user.Role == UserRole.Admin)
+            {
+                throw new InvalidOperationException("Admin gebruikers kunnen niet worden gedeactiveerd");
+            }
+
             user.IsActive = false;
             await _context.SaveChangesAsync();
 
@@ -463,9 +469,173 @@ namespace HoppyRoute.Application.Services
             return new string(password);
         }
 
+        public async Task<(bool Success, string TemporaryPassword)> ResetUserPasswordAsync(int userId)
+        {
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null || !user.IsActive)
+            {
+                return (false, string.Empty);
+            }
+
+            // Don't allow resetting admin password (additional protection)
+            if (user.Role == UserRole.Admin)
+            {
+                throw new InvalidOperationException("Admin wachtwoord kan niet gereset worden");
+            }
+
+            // Generate new temporary password
+            var temporaryPassword = GenerateTemporaryPassword();
+            
+            // Hash the temporary password
+            user.PasswordHash = HashPassword(temporaryPassword);
+            user.IsTemporaryPassword = true;
+            user.TemporaryPasswordExpiresAt = DateTime.UtcNow.AddDays(7); // 7 days to change password
+
+            await _context.SaveChangesAsync();
+
+            // Send email with new temporary password
+            try
+            {
+                await _emailService.SendTemporaryPasswordEmailAsync(
+                    user.Email, 
+                    user.FirstName ?? "Gebruiker", 
+                    user.LastName ?? "", 
+                    user.Username, 
+                    temporaryPassword
+                );
+                
+                return (true, temporaryPassword);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to send reset password email: {ex.Message}");
+                // Even if email fails, the password was reset
+                return (true, temporaryPassword);
+            }
+        }
+
         public async Task<int> GetUsersCountAsync()
         {
             return await _context.Users.CountAsync();
+        }
+
+        public async Task<bool> InitiatePasswordResetAsync(string email)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email && u.IsActive);
+            if (user == null)
+            {
+                // Don't reveal that email doesn't exist for security
+                return true;
+            }
+
+            // Don't allow password reset for admin users
+            if (user.Role == UserRole.Admin)
+            {
+                return true; // Still return true to not reveal admin emails
+            }
+
+            // Generate reset token
+            var resetToken = GenerateSecureToken();
+            user.PasswordResetToken = resetToken;
+            user.PasswordResetTokenExpires = DateTime.UtcNow.AddHours(1); // 1 hour expiry
+
+            await _context.SaveChangesAsync();
+
+            // Send password reset email
+            try
+            {
+                var resetLink = $"https://hoppy.app/reset-password?token={resetToken}";
+                await _emailService.SendPasswordResetEmailAsync(user.Email, user.FirstName ?? "Gebruiker", resetLink);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to send password reset email: {ex.Message}");
+                // Clear the token if email failed
+                user.PasswordResetToken = null;
+                user.PasswordResetTokenExpires = null;
+                await _context.SaveChangesAsync();
+                return false;
+            }
+        }
+
+        public async Task<PasswordResetResult> ResetPasswordWithTokenAsync(string token, string newPassword)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => 
+                u.PasswordResetToken == token && 
+                u.PasswordResetTokenExpires > DateTime.UtcNow &&
+                u.IsActive);
+
+            if (user == null)
+            {
+                return new PasswordResetResult 
+                { 
+                    Success = false, 
+                    ErrorMessage = "Ongeldige of verlopen reset token" 
+                };
+            }
+
+            // Validate password strength
+            if (string.IsNullOrEmpty(newPassword) || newPassword.Length < 8)
+            {
+                return new PasswordResetResult 
+                { 
+                    Success = false, 
+                    ErrorMessage = "Wachtwoord moet minimaal 8 karakters lang zijn" 
+                };
+            }
+
+            // Update password
+            user.PasswordHash = HashPassword(newPassword);
+            user.PasswordResetToken = null;
+            user.PasswordResetTokenExpires = null;
+            user.IsTemporaryPassword = false;
+
+            await _context.SaveChangesAsync();
+
+            return new PasswordResetResult { Success = true };
+        }
+
+        private string GenerateSecureToken()
+        {
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                var bytes = new byte[32];
+                rng.GetBytes(bytes);
+                return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
+            }
+        }
+
+        public async Task<bool> TestEmailAsync(string email, string firstName, string lastName, string username, string temporaryPassword)
+        {
+            try
+            {
+                return await _emailService.SendTemporaryPasswordEmailAsync(email, firstName, lastName, username, temporaryPassword);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Test email failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<bool> AssignUserToRegionAsync(int userId, int regionId)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null) return false;
+
+            user.AssignedRegionId = regionId;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<List<UserDto>> GetUsersByRegionAsync(int regionId)
+        {
+            var users = await _context.Users
+                .Where(u => u.AssignedRegionId == regionId && u.IsActive)
+                .ToListAsync();
+
+            return users.Select(MapToUserDto).ToList();
         }
     }
 }

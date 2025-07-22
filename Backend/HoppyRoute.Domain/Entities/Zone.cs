@@ -17,8 +17,13 @@ namespace HoppyRoute.Domain.Entities
         [Required]
         public string GeoJsonBoundary { get; set; } = string.Empty;
         
+        // Foreign keys
+        public int RegionId { get; set; }
+        public Region Region { get; set; } = null!;
+        
         // Navigation properties
         public virtual ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
         public virtual ICollection<Route> Routes { get; set; } = new List<Route>();
+        public virtual ICollection<ParkingZone> ParkingZones { get; set; } = new List<ParkingZone>();
     }
 }

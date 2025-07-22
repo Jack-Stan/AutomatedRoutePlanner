@@ -39,6 +39,10 @@ namespace HoppyRoute.Domain.Entities
         public bool HasCompletedFirstLogin { get; set; } = false;
         public DateTime? TemporaryPasswordExpiresAt { get; set; }
 
+        // Password reset functionality
+        public string? PasswordResetToken { get; set; }
+        public DateTime? PasswordResetTokenExpires { get; set; }
+
         // For hierarchy: Fleet Managers created by Admin, Swappers created by Fleet Manager
         public int? CreatedByUserId { get; set; }
         public User? CreatedByUser { get; set; }
@@ -49,5 +53,15 @@ namespace HoppyRoute.Domain.Entities
         // Zone assignment for Fleet Managers and Swappers
         public int? AssignedZoneId { get; set; }
         public Zone? AssignedZone { get; set; }
+
+        // Region assignment for Fleet Managers and Swappers
+        public int? AssignedRegionId { get; set; }
+        public Region? AssignedRegion { get; set; }
+
+        // Routes created by this user (for Fleet Managers)
+        public virtual ICollection<Route> CreatedRoutes { get; set; } = new List<Route>();
+
+        // Routes assigned to this user (for Battery Swappers)
+        public virtual ICollection<Route> AssignedRoutes { get; set; } = new List<Route>();
     }
 }

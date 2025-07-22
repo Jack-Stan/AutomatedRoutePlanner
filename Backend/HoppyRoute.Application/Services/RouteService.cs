@@ -23,7 +23,7 @@ namespace HoppyRoute.Application.Services
             // Convert RouteGenerationRequest to CreateRouteRequest
             var createRequest = new CreateRouteRequest
             {
-                SwapperId = request.SwapperId,
+                AssignedSwapperId = request.AssignedSwapperId,
                 ZoneId = request.ZoneId,
                 Date = request.StartTime ?? DateTime.Today,
                 TargetDurationMinutes = request.TargetDurationMinutes,
@@ -78,11 +78,11 @@ namespace HoppyRoute.Application.Services
         {
             var today = DateTime.Today;
             var route = await _context.Routes
-                .Include(r => r.Swapper)
+                .Include(r => r.AssignedSwapper)
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
-                .FirstOrDefaultAsync(r => r.SwapperId == swapperId && r.Date.Date == today);
+                .FirstOrDefaultAsync(r => r.AssignedSwapperId == swapperId && r.Date.Date == today);
 
             return route != null ? MapToRouteDto(route) : null;
         }
@@ -95,7 +95,7 @@ namespace HoppyRoute.Application.Services
                 // Create the route first
                 var route = new Route
                 {
-                    SwapperId = request.SwapperId,
+                    AssignedSwapperId = request.AssignedSwapperId,
                     ZoneId = request.ZoneId,
                     Date = request.Date,
                     TargetDurationMinutes = request.TargetDurationMinutes,
@@ -150,7 +150,7 @@ namespace HoppyRoute.Application.Services
 
                 // Reload route with all includes for return
                 var createdRoute = await _context.Routes
-                    .Include(r => r.Swapper)
+                    .Include(r => r.AssignedSwapper)
                     .Include(r => r.Zone)
                     .Include(r => r.Stops)
                         .ThenInclude(s => s.Vehicle)
@@ -169,7 +169,7 @@ namespace HoppyRoute.Application.Services
         public async Task<List<RouteDto>> GetRoutesByZoneAsync(int zoneId)
         {
             var routes = await _context.Routes
-                .Include(r => r.Swapper)
+                .Include(r => r.AssignedSwapper)
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
@@ -182,7 +182,7 @@ namespace HoppyRoute.Application.Services
         public async Task<RouteDto?> GetRouteByIdAsync(int routeId)
         {
             var route = await _context.Routes
-                .Include(r => r.Swapper)
+                .Include(r => r.AssignedSwapper)
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
@@ -194,7 +194,7 @@ namespace HoppyRoute.Application.Services
         public async Task<RouteDto?> ConfirmRouteAsync(int routeId)
         {
             var route = await _context.Routes
-                .Include(r => r.Swapper)
+                .Include(r => r.AssignedSwapper)
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
@@ -213,7 +213,7 @@ namespace HoppyRoute.Application.Services
         public async Task<List<RouteDto>> GetRoutesByStatusAsync(RouteStatus status)
         {
             var routes = await _context.Routes
-                .Include(r => r.Swapper)
+                .Include(r => r.AssignedSwapper)
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
@@ -228,8 +228,8 @@ namespace HoppyRoute.Application.Services
             return new RouteDto
             {
                 Id = route.Id,
-                SwapperId = route.SwapperId,
-                SwapperName = route.Swapper?.Name ?? "",
+                AssignedSwapperId = route.AssignedSwapperId,
+                AssignedSwapperName = route.AssignedSwapper?.FirstName + " " + route.AssignedSwapper?.LastName ?? "",
                 ZoneId = route.ZoneId,
                 ZoneName = route.Zone?.Name ?? "",
                 Date = route.Date,
@@ -260,6 +260,111 @@ namespace HoppyRoute.Application.Services
                     ActualDepartureTime = s.ActualDepartureTime
                 }).OrderBy(s => s.Order).ToList() ?? new List<RouteStopDto>()
             };
+        }
+
+        public async Task<RouteDto> CreateRouteAsync(CreateRouteRequest request, int createdByUserId)
+        {
+            var route = new Route
+            {
+                Name = request.Name,
+                Description = request.Description,
+                AssignedSwapperId = request.AssignedSwapperId,
+                CreatedByUserId = createdByUserId,
+                ZoneId = request.ZoneId,
+                RegionId = request.RegionId,
+                Date = request.Date,
+                TargetDurationMinutes = request.TargetDurationMinutes,
+                TotalVehicleCount = request.VehicleIds.Count,
+                Status = RouteStatus.Suggested,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Routes.Add(route);
+            await _context.SaveChangesAsync();
+
+            return MapToRouteDto(route);
+        }
+
+        public async Task<RouteDto?> UpdateRouteAsync(int routeId, UpdateRouteRequest request)
+        {
+            var route = await _context.Routes.FirstOrDefaultAsync(r => r.Id == routeId);
+            if (route == null) return null;
+
+            route.Name = request.Name;
+            route.Description = request.Description;
+            route.Date = request.Date;
+            route.TargetDurationMinutes = request.TargetDurationMinutes;
+            route.EstimatedDistanceKm = request.EstimatedDistanceKm;
+
+            await _context.SaveChangesAsync();
+            return MapToRouteDto(route);
+        }
+
+        public async Task<bool> DeleteRouteAsync(int routeId)
+        {
+            var route = await _context.Routes.FirstOrDefaultAsync(r => r.Id == routeId);
+            if (route == null) return false;
+
+            _context.Routes.Remove(route);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<List<RouteDto>> GetRoutesByRegionAsync(int regionId)
+        {
+            var routes = await _context.Routes
+                .Include(r => r.AssignedSwapper)
+                .Include(r => r.Zone)
+                .Where(r => r.RegionId == regionId)
+                .ToListAsync();
+
+            return routes.Select(MapToRouteDto).ToList();
+        }
+
+        public async Task<List<RouteDto>> GetRoutesByUserAsync(int userId)
+        {
+            var routes = await _context.Routes
+                .Include(r => r.AssignedSwapper)
+                .Include(r => r.Zone)
+                .Where(r => r.AssignedSwapperId == userId || r.CreatedByUserId == userId)
+                .ToListAsync();
+
+            return routes.Select(MapToRouteDto).ToList();
+        }
+
+        public async Task<RouteDto?> StartRouteAsync(int routeId)
+        {
+            var route = await _context.Routes.FirstOrDefaultAsync(r => r.Id == routeId);
+            if (route == null) return null;
+
+            route.Status = RouteStatus.InProgress;
+            route.StartedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return MapToRouteDto(route);
+        }
+
+        public async Task<RouteDto?> CompleteRouteAsync(int routeId)
+        {
+            var route = await _context.Routes.FirstOrDefaultAsync(r => r.Id == routeId);
+            if (route == null) return null;
+
+            route.Status = RouteStatus.Completed;
+            route.CompletedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return MapToRouteDto(route);
+        }
+
+        public async Task<List<RouteDto>> GetActiveRoutesAsync()
+        {
+            var routes = await _context.Routes
+                .Include(r => r.AssignedSwapper)
+                .Include(r => r.Zone)
+                .Where(r => r.Status == RouteStatus.InProgress || r.Status == RouteStatus.Confirmed)
+                .ToListAsync();
+
+            return routes.Select(MapToRouteDto).ToList();
         }
     }
 }

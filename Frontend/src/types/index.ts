@@ -51,6 +51,16 @@ export interface Swapper {
   phone?: string;
 }
 
+export interface RouteGenerationRequest {
+  assignedSwapperId: string;
+  zoneId: string;
+  targetDurationMinutes: number;
+  batteryThreshold: number;
+  name: string;
+  description: string;
+  routeType?: string;
+}
+
 export enum RouteStatus {
   Pending = 0,
   InProgress = 1,
@@ -87,6 +97,7 @@ export type RootStackParamList = {
   Login: undefined;
   FirstLogin: undefined;
   Routes: undefined;
+  RouteGeneration: undefined;
   RouteDetails: { routeId: number };
   Vehicles: undefined;
   VehicleDetails: { vehicleId: number };

@@ -83,5 +83,41 @@ namespace HoppyRouteApi.Controllers
 
             return Ok(route);
         }
+
+        /// <summary>
+        /// FleetManager/Admin keurt route goed
+        /// </summary>
+        [HttpPost("{id}/approve")]
+        public async Task<ActionResult<RouteDto>> ApproveRoute(int id, [FromBody] RouteApprovalRequest request)
+        {
+            var route = await _routeService.ApproveRouteAsync(id, request.ApprovedBy, request.Notes);
+            if (route == null)
+                return NotFound($"Route met ID {id} niet gevonden");
+
+            return Ok(route);
+        }
+
+        /// <summary>
+        /// FleetManager/Admin wijst route af
+        /// </summary>
+        [HttpPost("{id}/reject")]
+        public async Task<ActionResult<RouteDto>> RejectRoute(int id, [FromBody] RouteApprovalRequest request)
+        {
+            var route = await _routeService.RejectRouteAsync(id, request.ApprovedBy, request.Notes);
+            if (route == null)
+                return NotFound($"Route met ID {id} niet gevonden");
+
+            return Ok(route);
+        }
+
+        /// <summary>
+        /// Routes die goedkeuring nodig hebben
+        /// </summary>
+        [HttpGet("pending-approval")]
+        public async Task<ActionResult<List<RouteDto>>> GetRoutesPendingApproval([FromQuery] int? zoneId = null)
+        {
+            var routes = await _routeService.GetRoutesPendingApprovalAsync(zoneId);
+            return Ok(routes);
+        }
     }
 }

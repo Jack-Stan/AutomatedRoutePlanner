@@ -66,7 +66,7 @@ namespace HoppyRoute.Infrastructure.Data
                 entity.HasOne(pz => pz.Zone)
                       .WithMany(z => z.ParkingZones)
                       .HasForeignKey(pz => pz.ZoneId)
-                      .OnDelete(DeleteBehavior.Cascade);
+                      .OnDelete(DeleteBehavior.Restrict);
             });
 
             // Vehicle configuration
@@ -86,7 +86,7 @@ namespace HoppyRoute.Infrastructure.Data
                 entity.HasOne(v => v.Zone)
                       .WithMany(z => z.Vehicles)
                       .HasForeignKey(v => v.ZoneId)
-                      .OnDelete(DeleteBehavior.SetNull);
+                      .OnDelete(DeleteBehavior.NoAction);
 
                 entity.HasOne(v => v.CurrentParkingZone)
                       .WithMany(pz => pz.Vehicles)

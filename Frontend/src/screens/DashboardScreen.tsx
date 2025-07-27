@@ -66,7 +66,7 @@ export default function DashboardScreen() {
   const [routes, setRoutes] = useState<RouteDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedZoneId] = useState<number>(1); // Default zone
+  const [selectedZoneId] = useState<number>(2); // Kortrijk zone
   const [activeUsersCount, setActiveUsersCount] = useState<number>(0);
   const [zonesCount, setZonesCount] = useState<number>(0);
   const [recentActivities, setRecentActivities] = useState<Array<{

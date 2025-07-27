@@ -36,6 +36,10 @@ namespace HoppyRoute.Application.Interfaces
         Task<List<ZoneDto>> GetZonesByRegionAsync(int regionId);
         Task<List<VehicleDto>> GetVehiclesByRegionAsync(GetVehiclesInRegionRequest request);
         Task<List<UserDto>> GetUsersByRegionAsync(int regionId);
+        
+        // New methods for country/region structure
+        Task<List<CountryDto>> GetCountriesAsync();
+        Task<List<RegionDto>> GetRegionsByCountryAsync(string countryCode);
     }
 
     // Parking Zone Management
@@ -76,12 +80,19 @@ namespace HoppyRoute.Application.Interfaces
         Task<RouteDto?> GetTodaysRouteForSwapperAsync(int swapperId);
         Task<List<RouteDto>> GetRoutesByStatusAsync(Domain.Enums.RouteStatus status);
         Task<List<RouteDto>> GetActiveRoutesAsync();
+        
+        // Route Approval Methods
+        Task<RouteDto?> ApproveRouteAsync(int routeId, int approvedBy, string? notes = null);
+        Task<RouteDto?> RejectRouteAsync(int routeId, int approvedBy, string? notes = null);
+        Task<List<RouteDto>> GetRoutesPendingApprovalAsync(int? zoneId = null);
     }
 
     public interface IVehicleService
     {
         Task<List<VehicleDto>> GetLowBatteryVehiclesAsync(int zoneId, int batteryThreshold = 25);
+        Task<List<VehicleDto>> GetAllLowBatteryVehiclesAsync(int batteryThreshold = 25);
         Task<List<VehicleDto>> GetVehiclesByZoneAsync(int zoneId);
+        Task<List<VehicleDto>> GetAllVehiclesAsync();
         Task<List<VehicleDto>> GetVehiclesByRegionAsync(int regionId);
         Task<List<VehicleDto>> GetVehiclesByParkingZoneAsync(int parkingZoneId);
         Task<VehicleDto?> GetVehicleByIdAsync(int vehicleId);
@@ -89,6 +100,7 @@ namespace HoppyRoute.Application.Interfaces
         Task<VehicleDto?> UpdateVehicleBatteryAsync(int vehicleId, int batteryLevel);
         Task<bool> MoveVehicleToParkingZoneAsync(int vehicleId, int? parkingZoneId);
         Task<List<VehicleDto>> GetAvailableVehiclesAsync(int zoneId);
+        Task<List<VehicleDto>> GetVehiclesNeedingBatteryReplacementAsync(int zoneId);
     }
 
     public interface IZoneService

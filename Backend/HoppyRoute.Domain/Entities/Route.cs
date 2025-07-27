@@ -43,6 +43,18 @@ namespace HoppyRoute.Domain.Entities
         public RouteStatus Status { get; set; }
         
         [Required]
+        public RouteApprovalStatus ApprovalStatus { get; set; } = RouteApprovalStatus.PendingApproval;
+        
+        public RouteType? Type { get; set; } // Optional route type classification
+        
+        public int? ApprovedBy { get; set; } // User ID (FleetManager or Admin)
+        
+        public DateTime? ApprovedAt { get; set; }
+        
+        [StringLength(500)]
+        public string? ManagerNotes { get; set; } // Notes from FleetManager/Admin
+        
+        [Required]
         public DateTime CreatedAt { get; set; }
         
         public DateTime? ConfirmedAt { get; set; }
@@ -57,6 +69,9 @@ namespace HoppyRoute.Domain.Entities
         
         [ForeignKey("CreatedByUserId")]
         public virtual User CreatedByUser { get; set; } = null!;
+        
+        [ForeignKey("ApprovedBy")]
+        public virtual User? ApprovedByUser { get; set; }
         
         [ForeignKey("ZoneId")]
         public virtual Zone Zone { get; set; } = null!;

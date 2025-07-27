@@ -63,6 +63,12 @@ namespace HoppyRoute.Application.DTOs
         public double? EstimatedDistanceKm { get; set; }
         public int TotalVehicleCount { get; set; }
         public RouteStatus Status { get; set; }
+        public RouteApprovalStatus ApprovalStatus { get; set; }
+        public RouteType? Type { get; set; }
+        public int? ApprovedBy { get; set; }
+        public string? ApprovedByName { get; set; }
+        public DateTime? ApprovedAt { get; set; }
+        public string? ManagerNotes { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? ConfirmedAt { get; set; }
         public DateTime? StartedAt { get; set; }

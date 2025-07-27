@@ -32,7 +32,6 @@ export default function VehiclesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedZoneId] = useState<number>(1); // Default zone - later from user selection
   const [showLowBatteryOnly, setShowLowBatteryOnly] = useState(false);
 
   const userRole = user?.roleName?.toLowerCase();
@@ -46,11 +45,15 @@ export default function VehiclesScreen() {
       setLoading(true);
       setError(null);
       
+      console.log(`Fetching ALL vehicles, lowBatteryOnly: ${showLowBatteryOnly}`);
+      
       let vehicleData: VehicleDto[];
       if (showLowBatteryOnly) {
-        vehicleData = await apiService.getLowBatteryVehicles(selectedZoneId, 25);
+        vehicleData = await apiService.getAllLowBatteryVehicles(25);
+        console.log(`Found ${vehicleData.length} low battery vehicles across all zones`);
       } else {
-        vehicleData = await apiService.getVehiclesByZone(selectedZoneId);
+        vehicleData = await apiService.getAllVehicles();
+        console.log(`Found ${vehicleData.length} total vehicles across all zones`);
       }
       
       setVehicles(vehicleData);
@@ -112,6 +115,9 @@ export default function VehiclesScreen() {
       <View style={styles.vehicleHeader}>
         <View style={styles.vehicleInfo}>
           <Text style={styles.vehicleId}>#{item.externalId}</Text>
+          <Text style={styles.vehicleDetails}>
+            {item.vehicleType} • {item.registrationNumber}
+          </Text>
           <Text style={styles.zoneName}>{item.zoneName}</Text>
         </View>
         <View style={[styles.batteryContainer, { backgroundColor: getBatteryColor(item.batteryLevel) }]}>
@@ -137,6 +143,24 @@ export default function VehiclesScreen() {
             Laatste update: {formatLastUpdated(item.lastUpdated)}
           </Text>
         </View>
+        <View style={styles.detailRow}>
+          <Ionicons 
+            name={item.isAvailable ? "checkmark-circle-outline" : "close-circle-outline"} 
+            size={16} 
+            color={item.isAvailable ? HoppyColors.success : HoppyColors.error} 
+          />
+          <Text style={[styles.detailText, { color: item.isAvailable ? HoppyColors.success : HoppyColors.error }]}>
+            {item.isAvailable ? 'Beschikbaar' : 'Niet beschikbaar'}
+          </Text>
+        </View>
+        {item.needsBatteryReplacement && (
+          <View style={styles.detailRow}>
+            <Ionicons name="warning-outline" size={16} color={HoppyColors.warning} />
+            <Text style={[styles.detailText, { color: HoppyColors.warning }]}>
+              Batterij vervanging nodig
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Action buttons for swappers */}
@@ -153,25 +177,65 @@ export default function VehiclesScreen() {
   );
 
   const renderFilterButton = () => (
-    <TouchableOpacity
-      style={[
-        styles.filterButton,
-        { backgroundColor: showLowBatteryOnly ? HoppyColors.warning : HoppyColors.gray200 }
-      ]}
-      onPress={() => setShowLowBatteryOnly(!showLowBatteryOnly)}
-    >
-      <Ionicons 
-        name="battery-charging-outline" 
-        size={18} 
-        color={showLowBatteryOnly ? HoppyColors.white : HoppyColors.gray700} 
-      />
-      <Text style={[
-        styles.filterButtonText,
-        { color: showLowBatteryOnly ? HoppyColors.white : HoppyColors.gray700 }
-      ]}>
-        {showLowBatteryOnly ? 'Alle voertuigen' : 'Lage batterij'}
-      </Text>
-    </TouchableOpacity>
+    <View style={styles.buttonContainer}>
+      <TouchableOpacity
+        style={[
+          styles.filterButton,
+          { backgroundColor: showLowBatteryOnly ? HoppyColors.warning : HoppyColors.gray200 }
+        ]}
+        onPress={() => setShowLowBatteryOnly(!showLowBatteryOnly)}
+      >
+        <Ionicons 
+          name="battery-charging-outline" 
+          size={18} 
+          color={showLowBatteryOnly ? HoppyColors.white : HoppyColors.gray700} 
+        />
+        <Text style={[
+          styles.filterButtonText,
+          { color: showLowBatteryOnly ? HoppyColors.white : HoppyColors.gray700 }
+        ]}>
+          {showLowBatteryOnly ? 'Alle voertuigen' : 'Lage batterij'}
+        </Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity
+        style={[styles.debugButton]}
+        onPress={async () => {
+          try {
+            // Calculate stats from current vehicle data
+            const totalVehicles = vehicles.length;
+            const lowBatteryVehicles = vehicles.filter(v => v.batteryLevel <= 25).length;
+            const availableVehicles = vehicles.filter(v => v.isAvailable).length;
+            const needingReplacement = vehicles.filter(v => v.needsBatteryReplacement).length;
+            
+            // Group by zones
+            const zoneStats = vehicles.reduce((acc, vehicle) => {
+              const zoneName = vehicle.zoneName || `Zone ${vehicle.zoneId}`;
+              if (!acc[zoneName]) acc[zoneName] = 0;
+              acc[zoneName]++;
+              return acc;
+            }, {} as Record<string, number>);
+            
+            const zoneStatsText = Object.entries(zoneStats)
+              .map(([zone, count]) => `${zone}: ${count}`)
+              .join('\n');
+            
+            Alert.alert(
+              'Vehicle Stats (Alle Zones)', 
+              `Totaal: ${totalVehicles}\n` +
+              `Lage batterij: ${lowBatteryVehicles}\n` +
+              `Beschikbaar: ${availableVehicles}\n` +
+              `Vervanging nodig: ${needingReplacement}\n\n` +
+              `Per zone:\n${zoneStatsText}`
+            );
+          } catch (err) {
+            Alert.alert('Debug Error', 'Could not calculate stats');
+          }
+        }}
+      >
+        <Ionicons name="bug-outline" size={16} color={HoppyColors.primary} />
+      </TouchableOpacity>
+    </View>
   );
 
   if (loading && !refreshing) {
@@ -233,8 +297,8 @@ export default function VehiclesScreen() {
             <Text style={styles.emptyText}>Geen voertuigen gevonden</Text>
             <Text style={styles.emptySubtext}>
               {showLowBatteryOnly 
-                ? 'Geen voertuigen met lage batterij in deze zone'
-                : 'Geen voertuigen beschikbaar in deze zone'
+                ? 'Geen voertuigen met lage batterij gevonden'
+                : 'Geen voertuigen beschikbaar'
               }
             </Text>
           </View>
@@ -389,6 +453,16 @@ const styles = StyleSheet.create({
     paddingVertical: HoppyTheme.spacing.sm,
     borderRadius: HoppyTheme.borderRadius.md,
     ...HoppyTheme.shadows.sm,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: HoppyTheme.spacing.sm,
+  },
+  debugButton: {
+    padding: HoppyTheme.spacing.sm,
+    backgroundColor: HoppyColors.gray200,
+    borderRadius: HoppyTheme.borderRadius.md,
   },
   swapButtonText: {
     color: HoppyColors.white,

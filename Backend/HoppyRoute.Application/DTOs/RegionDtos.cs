@@ -38,6 +38,8 @@ namespace HoppyRoute.Application.DTOs
         [StringLength(500)]
         public string? Description { get; set; }
 
+        public bool IsActive { get; set; } = true;
+
         public double? Latitude { get; set; }
         public double? Longitude { get; set; }
     }
@@ -63,5 +65,12 @@ namespace HoppyRoute.Application.DTOs
 
         public double? Latitude { get; set; }
         public double? Longitude { get; set; }
+    }
+
+    public class CountryDto
+    {
+        public string CountryCode { get; set; } = string.Empty;
+        public string CountryName { get; set; } = string.Empty;
+        public List<RegionDto> Regions { get; set; } = new List<RegionDto>();
     }
 }

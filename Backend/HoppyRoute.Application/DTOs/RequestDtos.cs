@@ -28,6 +28,9 @@ namespace HoppyRoute.Application.DTOs
         
         [StringLength(1000)]
         public string? Description { get; set; }
+        
+        [StringLength(50)]
+        public string? RouteType { get; set; }
     }
 
     public class RouteGenerationResponse
@@ -92,6 +95,9 @@ namespace HoppyRoute.Application.DTOs
         public List<int> VehicleIds { get; set; } = new List<int>();
         
         public List<RouteStopRequest> CustomStops { get; set; } = new List<RouteStopRequest>();
+        
+        [StringLength(50)]
+        public string? RouteType { get; set; }
     }
 
     public class RouteStopRequest

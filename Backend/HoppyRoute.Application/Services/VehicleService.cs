@@ -18,8 +18,23 @@ namespace HoppyRoute.Application.Services
         {
             var vehicles = await _context.Vehicles
                 .Include(v => v.Zone)
-                .Where(v => v.ZoneId == zoneId && v.BatteryLevel <= batteryThreshold)
+                .Where(v => v.ZoneId == zoneId && 
+                           v.BatteryLevel <= batteryThreshold && 
+                           v.IsAvailable == true)
                 .OrderBy(v => v.BatteryLevel)
+                .ToListAsync();
+
+            return vehicles.Select(MapToVehicleDto).ToList();
+        }
+
+        public async Task<List<VehicleDto>> GetAllLowBatteryVehiclesAsync(int batteryThreshold = 25)
+        {
+            var vehicles = await _context.Vehicles
+                .Include(v => v.Zone)
+                .Where(v => v.BatteryLevel <= batteryThreshold && 
+                           v.IsAvailable == true)
+                .OrderBy(v => v.BatteryLevel)
+                .ThenBy(v => v.ZoneId)
                 .ToListAsync();
 
             return vehicles.Select(MapToVehicleDto).ToList();
@@ -31,6 +46,17 @@ namespace HoppyRoute.Application.Services
                 .Include(v => v.Zone)
                 .Where(v => v.ZoneId == zoneId)
                 .OrderBy(v => v.ExternalId)
+                .ToListAsync();
+
+            return vehicles.Select(MapToVehicleDto).ToList();
+        }
+
+        public async Task<List<VehicleDto>> GetAllVehiclesAsync()
+        {
+            var vehicles = await _context.Vehicles
+                .Include(v => v.Zone)
+                .OrderBy(v => v.ZoneId)
+                .ThenBy(v => v.ExternalId)
                 .ToListAsync();
 
             return vehicles.Select(MapToVehicleDto).ToList();
@@ -151,6 +177,19 @@ namespace HoppyRoute.Application.Services
                 .Include(v => v.Zone)
                 .Where(v => v.ZoneId == zoneId && v.IsAvailable)
                 .OrderBy(v => v.ExternalId)
+                .ToListAsync();
+
+            return vehicles.Select(MapToVehicleDto).ToList();
+        }
+
+        public async Task<List<VehicleDto>> GetVehiclesNeedingBatteryReplacementAsync(int zoneId)
+        {
+            var vehicles = await _context.Vehicles
+                .Include(v => v.Zone)
+                .Where(v => v.ZoneId == zoneId && 
+                           v.NeedsBatteryReplacement == true && 
+                           v.IsAvailable == true)
+                .OrderBy(v => v.BatteryLevel)
                 .ToListAsync();
 
             return vehicles.Select(MapToVehicleDto).ToList();

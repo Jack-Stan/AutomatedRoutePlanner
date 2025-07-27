@@ -54,6 +54,7 @@ builder.Services.AddScoped<IRouteService, HoppyRoute.Application.Services.RouteS
 builder.Services.AddScoped<IVehicleService, HoppyRoute.Application.Services.VehicleService>();
 builder.Services.AddScoped<IZoneService, HoppyRoute.Application.Services.ZoneService>();
 builder.Services.AddScoped<IRouteStopService, HoppyRoute.Application.Services.RouteStopService>();
+builder.Services.AddScoped<IRegionService, HoppyRoute.Application.Services.RegionService>();
 
 // CORS configuration for frontend
 builder.Services.AddCors(options =>

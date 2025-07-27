@@ -13,6 +13,7 @@ import FirstLoginScreen from '../screens/FirstLoginScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import RoutesScreen from '../screens/RoutesScreen';
 import RouteDetailsScreen from '../screens/RouteDetailsScreen';
+import RouteGenerationScreen from '../screens/RouteGenerationScreen';
 import VehiclesScreen from '../screens/VehiclesScreen';
 import VehicleDetailsScreen from '../screens/VehicleDetailsScreen';
 import MapScreen from '../screens/MapScreen';
@@ -200,6 +201,13 @@ export default function RootNavigator() {
               component={RouteDetailsScreen}
               options={{ 
                 title: 'Route Details',
+              }}
+            />
+            <Stack.Screen 
+              name="RouteGeneration" 
+              component={RouteGenerationScreen}
+              options={{ 
+                title: 'Route Genereren',
               }}
             />
             <Stack.Screen 

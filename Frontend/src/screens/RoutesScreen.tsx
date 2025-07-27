@@ -42,7 +42,7 @@ export default function RoutesScreen() {
   const [routes, setRoutes] = useState<RouteDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedZoneId, setSelectedZoneId] = useState<number>(1); // Default zone
+  const [selectedZoneId, setSelectedZoneId] = useState<number>(2); // Kortrijk zone default
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [routeDuration, setRouteDuration] = useState<string>('240'); // 4 hours in minutes
   const [batteryThreshold, setBatteryThreshold] = useState<string>('25');
@@ -252,7 +252,7 @@ export default function RoutesScreen() {
       {(userRole === 'admin' || userRole === 'fleetmanager') && (
         <TouchableOpacity
           style={styles.fab}
-          onPress={() => setShowGenerateModal(true)}
+          onPress={() => navigation.navigate('RouteGeneration')}
         >
           <Ionicons name="add" size={24} color={HoppyColors.white} />
         </TouchableOpacity>

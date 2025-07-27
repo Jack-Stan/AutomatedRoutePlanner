@@ -5,11 +5,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 interface VehicleDto {
   id: number;
   externalId: string;
+  registrationNumber: string;
+  vehicleType: string;
   zoneId: number;
   zoneName: string;
+  currentParkingZoneId?: number;
+  currentParkingZoneName?: string;
   latitude: number;
   longitude: number;
   batteryLevel: number;
+  needsBatteryReplacement: boolean;
+  isAvailable: boolean;
   lastUpdated: string;
 }
 
@@ -18,6 +24,26 @@ interface ZoneDto {
   name: string;
   countryCode: string;
   geoJsonBoundary: string;
+  regionId: number;
+  regionName: string;
+}
+
+interface RegionDto {
+  id: number;
+  name: string;
+  country: string;
+  countryCode: string;
+  description?: string;
+  isActive: boolean;
+  latitude?: number;
+  longitude?: number;
+  zones: ZoneDto[];
+}
+
+interface CountryDto {
+  countryCode: string;
+  countryName: string;
+  regions: RegionDto[];
 }
 
 interface SwapperDto {
@@ -38,6 +64,8 @@ interface RouteStopDto {
   status: number; // RouteStopStatus enum
   actualArrivalTime?: string;
   actualDepartureTime?: string;
+  specialInstructions?: string; // Extra instructies voor battery swapper
+  batterySwapNotes?: string; // Specifieke opmerkingen over batterij wissel
 }
 
 interface RouteDto {
@@ -49,16 +77,27 @@ interface RouteDto {
   date: string;
   targetDurationMinutes: number;
   status: number; // RouteStatus enum
+  approvalStatus: number; // RouteApprovalStatus enum
+  type?: number; // RouteType enum
+  approvedBy?: number;
+  approvedByName?: string;
+  approvedAt?: string;
+  managerNotes?: string;
   createdAt: string;
   confirmedAt?: string;
   stops: RouteStopDto[];
 }
 
 interface RouteGenerationRequest {
+  assignedSwapperId: number;
   zoneId: number;
-  swapperId: number;
+  regionId?: number;
+  targetDurationMinutes: number;
   batteryThreshold?: number;
-  targetDurationMinutes?: number;
+  startTime?: string;
+  name: string;
+  description?: string;
+  routeType?: string;
 }
 
 interface RouteGenerationResponse {
@@ -186,6 +225,12 @@ class ApiService {
     return response.data;
   }
 
+  // Route generation methods
+  async generateRoute(request: RouteGenerationRequest): Promise<RouteGenerationResponse> {
+    const response: AxiosResponse<RouteGenerationResponse> = await this.api.post('/routes/suggest', request);
+    return response.data;
+  }
+
   async getRouteSuggestions(zoneId: number): Promise<RouteDto[]> {
     const response: AxiosResponse<RouteDto[]> = await this.api.get(`/routes/suggestions?zoneId=${zoneId}`);
     return response.data;
@@ -231,14 +276,61 @@ class ApiService {
     return response.data;
   }
 
+  // Route approval endpoints
+  async approveRoute(routeId: number, approvedBy: number, notes?: string): Promise<RouteDto> {
+    const response: AxiosResponse<RouteDto> = await this.api.post(`/routes/${routeId}/approve`, {
+      approvedBy,
+      notes
+    });
+    return response.data;
+  }
+
+  async rejectRoute(routeId: number, approvedBy: number, notes?: string): Promise<RouteDto> {
+    const response: AxiosResponse<RouteDto> = await this.api.post(`/routes/${routeId}/reject`, {
+      approvedBy,
+      notes
+    });
+    return response.data;
+  }
+
+  async getRoutesPendingApproval(zoneId?: number): Promise<RouteDto[]> {
+    const url = zoneId ? `/routes/pending-approval?zoneId=${zoneId}` : '/routes/pending-approval';
+    const response: AxiosResponse<RouteDto[]> = await this.api.get(url);
+    return response.data;
+  }
+
+  // Route stop management
+  async updateRouteStopInstructions(routeId: number, stopId: number, specialInstructions?: string, batterySwapNotes?: string): Promise<RouteStopDto> {
+    const response: AxiosResponse<RouteStopDto> = await this.api.put(`/routes/${routeId}/stops/${stopId}/instructions`, {
+      specialInstructions,
+      batterySwapNotes
+    });
+    return response.data;
+  }
+
   // Vehicle endpoints (aangepast aan werkelijke backend)
   async getLowBatteryVehicles(zoneId: number, batteryThreshold: number = 25): Promise<VehicleDto[]> {
     const response: AxiosResponse<VehicleDto[]> = await this.api.get(`/vehicles/lowbattery?zoneId=${zoneId}&batteryThreshold=${batteryThreshold}`);
     return response.data;
   }
 
+  async getAllLowBatteryVehicles(batteryThreshold: number = 25): Promise<VehicleDto[]> {
+    const response: AxiosResponse<VehicleDto[]> = await this.api.get(`/vehicles/lowbattery/all?batteryThreshold=${batteryThreshold}`);
+    return response.data;
+  }
+
   async getVehiclesByZone(zoneId: number): Promise<VehicleDto[]> {
     const response: AxiosResponse<VehicleDto[]> = await this.api.get(`/vehicles/zone/${zoneId}`);
+    return response.data;
+  }
+
+  async getAllVehicles(): Promise<VehicleDto[]> {
+    const response: AxiosResponse<VehicleDto[]> = await this.api.get(`/vehicles/all`);
+    return response.data;
+  }
+
+  async getVehicleStats(zoneId: number): Promise<any> {
+    const response: AxiosResponse<any> = await this.api.get(`/vehicles/stats/zone/${zoneId}`);
     return response.data;
   }
 
@@ -281,6 +373,27 @@ class ApiService {
   // Additional zone methods
   async getZones(): Promise<ZoneDto[]> {
     const response: AxiosResponse<ZoneDto[]> = await this.api.get('/zones');
+    return response.data;
+  }
+
+  // Region endpoints
+  async getCountries(): Promise<CountryDto[]> {
+    const response: AxiosResponse<CountryDto[]> = await this.api.get('/regions/countries');
+    return response.data;
+  }
+
+  async getRegionsByCountry(countryCode: string): Promise<RegionDto[]> {
+    const response: AxiosResponse<RegionDto[]> = await this.api.get(`/regions/country/${countryCode}`);
+    return response.data;
+  }
+
+  async getRegions(): Promise<RegionDto[]> {
+    const response: AxiosResponse<RegionDto[]> = await this.api.get('/regions');
+    return response.data;
+  }
+
+  async getZonesByRegion(regionId: number): Promise<ZoneDto[]> {
+    const response: AxiosResponse<ZoneDto[]> = await this.api.get(`/regions/${regionId}/zones`);
     return response.data;
   }
 
@@ -407,6 +520,8 @@ export type {
   LoginRequest,
   LoginResponse,
   UserDto,
-  CreateUserRequest
+  CreateUserRequest,
+  RegionDto,
+  CountryDto
 };
 export default ApiService;

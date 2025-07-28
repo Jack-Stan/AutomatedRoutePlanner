@@ -52,6 +52,8 @@ namespace HoppyRoute.Application.DTOs
         public string? Description { get; set; }
         public int AssignedSwapperId { get; set; }
         public string AssignedSwapperName { get; set; } = string.Empty;
+        [Obsolete("Use AssignedSwapperName instead")]
+        public string swapperName => AssignedSwapperName; // For backwards compatibility with frontend
         public int CreatedByUserId { get; set; }
         public string CreatedByUserName { get; set; } = string.Empty;
         public int ZoneId { get; set; }

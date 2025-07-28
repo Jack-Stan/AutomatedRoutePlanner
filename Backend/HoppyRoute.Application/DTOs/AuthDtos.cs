@@ -28,6 +28,8 @@ namespace HoppyRoute.Application.DTOs
         public DateTime? LastLoginAt { get; set; }
         public int? AssignedZoneId { get; set; }
         public string? AssignedZoneName { get; set; }
+        public int? AssignedRegionId { get; set; }
+        public string? AssignedRegionName { get; set; }
         public string RoleName => Role.ToString();
         public bool IsTemporaryPassword { get; set; }
         public bool HasCompletedFirstLogin { get; set; }
@@ -49,6 +51,8 @@ namespace HoppyRoute.Application.DTOs
         public string? LastName { get; set; }
         public bool? IsActive { get; set; }
         public int? AssignedZoneId { get; set; }
+        public int? AssignedRegionId { get; set; }
+        public UserRole? Role { get; set; }
     }
 
     public class ChangePasswordRequestDto

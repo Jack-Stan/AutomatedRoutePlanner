@@ -14,7 +14,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { HoppyColors, HoppyTheme } from '../theme';
-import { apiService, RouteDto, RouteStopDto, CountryDto, RegionDto, ZoneDto, RouteGenerationRequest } from '../services/api';
+import { apiService, RouteDto, RouteStopDto, CountryDto, RegionDto, ZoneDto, RouteGenerationRequest, UserDto } from '../services/api';
 import { HoppyButton } from '../components';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -76,18 +76,19 @@ export default function RouteGenerationScreen() {
   const [countries, setCountries] = useState<CountryDto[]>([]);
   const [regions, setRegions] = useState<RegionDto[]>([]);
   const [zones, setZones] = useState<ZoneDto[]>([]);
+  const [swappers, setSwappers] = useState<UserDto[]>([]);
   const [routePreview, setRoutePreview] = useState<RouteDto | null>(null);
 
   // Selection states
   const [selectedCountry, setSelectedCountry] = useState<CountryDto | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<RegionDto | null>(null);
   const [selectedZone, setSelectedZone] = useState<ZoneDto | null>(null);
+  const [selectedSwapper, setSelectedSwapper] = useState<UserDto | null>(null);
 
   // Route parameters
   const [routeDuration, setRouteDuration] = useState<string>('4'); // 4 hours
   const [batteryThreshold, setBatteryThreshold] = useState<string>('25');
   const [routeType, setRouteType] = useState<string>('battery'); // Default to battery replacement
-  const [swapperId, setSwapperId] = useState<number>(user?.id || 1);
 
   // UI states
   const [loading, setLoading] = useState(false);
@@ -99,6 +100,7 @@ export default function RouteGenerationScreen() {
 
   useEffect(() => {
     loadCountries();
+    loadSwappers();
   }, []);
 
   const loadCountries = async () => {
@@ -110,6 +112,23 @@ export default function RouteGenerationScreen() {
       Alert.alert('Fout', 'Kon landen niet laden');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSwappers = async (forZoneId?: number) => {
+    try {
+      const swappersData = await apiService.getSwappers(forZoneId);
+      setSwappers(swappersData);
+      
+      // Auto-select first swapper if available
+      if (swappersData.length > 0) {
+        setSelectedSwapper(swappersData[0]);
+      } else {
+        setSelectedSwapper(null);
+      }
+    } catch (error) {
+      console.error('Error loading swappers:', error);
+      Alert.alert('Fout', 'Kon swappers niet laden');
     }
   };
 
@@ -148,15 +167,18 @@ export default function RouteGenerationScreen() {
     setCurrentStep(3);
   };
 
-  const handleZoneSelect = (zone: ZoneDto) => {
+  const handleZoneSelect = async (zone: ZoneDto) => {
     setSelectedZone(zone);
     setRoutePreview(null);
     setCurrentStep(3); // Go to parameters (step 3 instead of 4)
+    
+    // Load swappers assigned to this zone
+    await loadSwappers(zone.id);
   };
 
   const handleGenerateRoute = async () => {
-    if (!selectedZone) {
-      Alert.alert('Fout', 'Selecteer eerst een zone');
+    if (!selectedZone || !selectedSwapper) {
+      Alert.alert('Fout', 'Selecteer eerst een zone en swapper');
       return;
     }
 
@@ -180,7 +202,7 @@ export default function RouteGenerationScreen() {
       const selectedRouteType = RouteTypes[routeType as keyof typeof RouteTypes];
       
       const request: RouteGenerationRequest = {
-        assignedSwapperId: swapperId,
+        assignedSwapperId: selectedSwapper.id,
         zoneId: selectedZone.id,
         targetDurationMinutes: durationMinutes,
         batteryThreshold: threshold,
@@ -305,6 +327,8 @@ export default function RouteGenerationScreen() {
       <FlatList
         data={countries}
         keyExtractor={(item) => item.countryCode}
+        scrollEnabled={false}
+        nestedScrollEnabled={true}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.selectionItem}
@@ -338,6 +362,8 @@ export default function RouteGenerationScreen() {
       <FlatList
         data={regions}
         keyExtractor={(item) => item.id.toString()}
+        scrollEnabled={false}
+        nestedScrollEnabled={true}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.selectionItem}
@@ -380,6 +406,8 @@ export default function RouteGenerationScreen() {
         <FlatList
           data={zones}
           keyExtractor={(item) => item.id.toString()}
+          scrollEnabled={false}
+          nestedScrollEnabled={true}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.selectionItem}
@@ -410,6 +438,32 @@ export default function RouteGenerationScreen() {
       <Text style={styles.selectedInfo}>
         Zone: {selectedZone?.name} ({selectedCountry?.countryName})
       </Text>
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.inputLabel}>Toegewezen Swapper</Text>
+        <View style={styles.buttonRow}>
+          {swappers.map((swapper) => (
+            <TouchableOpacity
+              key={swapper.id}
+              style={[
+                styles.parameterButton,
+                selectedSwapper?.id === swapper.id && styles.parameterButtonActive
+              ]}
+              onPress={() => setSelectedSwapper(swapper)}
+            >
+              <Text style={[
+                styles.parameterButtonText,
+                selectedSwapper?.id === swapper.id && styles.parameterButtonTextActive
+              ]}>
+                {swapper.firstName} {swapper.lastName}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {swappers.length === 0 && (
+          <Text style={styles.noDataText}>Geen swappers beschikbaar</Text>
+        )}
+      </View>
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Route Type</Text>
@@ -529,6 +583,8 @@ export default function RouteGenerationScreen() {
         <FlatList
           data={routePreview.stops}
           keyExtractor={(item) => item.id.toString()}
+          scrollEnabled={false}
+          nestedScrollEnabled={true}
           renderItem={({ item, index }) => (
             <View style={styles.stopItem}>
               <View style={styles.stopHeader}>
@@ -1084,5 +1140,12 @@ const styles = StyleSheet.create({
   },
   routeTypeDescriptionActive: {
     color: HoppyColors.white,
+  },
+  noDataText: {
+    fontSize: 14,
+    color: HoppyColors.gray600,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginTop: 8,
   },
 });

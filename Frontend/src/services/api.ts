@@ -131,6 +131,8 @@ interface UserDto {
   lastLoginAt?: string;
   assignedZoneId?: number;
   assignedZoneName?: string;
+  assignedRegionId?: number;
+  assignedRegionName?: string;
   isTemporaryPassword: boolean; // New field for temporary password status
   hasCompletedFirstLogin: boolean; // New field to track first login completion
 }
@@ -141,15 +143,17 @@ interface CreateUserRequest {
   lastName: string;
   role: number; // UserRole enum value (0=Admin, 1=FleetManager, 2=BatterySwapper)
   assignedZoneId?: number;
+  assignedRegionId?: number;
 }
 
 class ApiService {
   private api: AxiosInstance;
+  private onAuthLogout?: () => void;
 
   constructor() {
     this.api = axios.create({
       baseURL: __DEV__ 
-        ? 'http://localhost:5033/api' // Development - ASP.NET Core backend port
+        ? 'http://192.168.129.51:5033/api' // Development - Use local IP for React Native
         : 'https://your-production-api.com/api', // Production URL
       timeout: 15000,
       headers: {
@@ -158,6 +162,10 @@ class ApiService {
     });
 
     this.setupInterceptors();
+  }
+
+  setAuthLogoutCallback(callback: () => void) {
+    this.onAuthLogout = callback;
   }
 
   private setupInterceptors() {
@@ -213,6 +221,18 @@ class ApiService {
             console.error('Error clearing auth storage:', storageError);
           }
         }
+
+        // Handle 403 Forbidden errors - might be old token format
+        if (error.response?.status === 403) {
+          console.log('403 Forbidden - clearing auth data to force re-login with new token format');
+          try {
+            await AsyncStorage.removeItem('authToken');
+            await AsyncStorage.removeItem('userData');
+            // Note: The user will need to re-login to get a new token with the correct format
+          } catch (storageError) {
+            console.error('Error clearing auth storage on 403:', storageError);
+          }
+        }
         
         return Promise.reject(error);
       }
@@ -254,6 +274,11 @@ class ApiService {
   // Additional route methods
   async getRoutes(): Promise<RouteDto[]> {
     const response: AxiosResponse<RouteDto[]> = await this.api.get('/routes');
+    return response.data;
+  }
+
+  async getAllRoutes(): Promise<RouteDto[]> {
+    const response: AxiosResponse<RouteDto[]> = await this.api.get('/routes/all');
     return response.data;
   }
 
@@ -468,13 +493,22 @@ class ApiService {
     return response.data;
   }
 
+  async getSwappers(zoneId?: number): Promise<UserDto[]> {
+    let url = '/auth/users?role=2'; // BatterySwapper = 2
+    if (zoneId) {
+      url += `&zoneId=${zoneId}`;
+    }
+    const response: AxiosResponse<UserDto[]> = await this.api.get(url);
+    return response.data;
+  }
+
   async updateUser(id: number, userData: Partial<CreateUserRequest>): Promise<UserDto> {
     const response: AxiosResponse<UserDto> = await this.api.put(`/auth/users/${id}`, userData);
     return response.data;
   }
 
   async deleteUser(id: number): Promise<void> {
-    await this.api.delete(`/auth/users/${id}`);
+    await this.api.delete(`/auth/users/${id}/permanent`);
   }
 
   async resetUserPassword(id: number): Promise<{ message: string; temporaryPassword: string }> {

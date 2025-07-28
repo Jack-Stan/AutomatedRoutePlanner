@@ -14,6 +14,7 @@ namespace HoppyRoute.Application.Interfaces
         Task<UserDto> UpdateUserAsync(int userId, UpdateUserRequestDto request);
         Task<bool> ChangePasswordAsync(int userId, ChangePasswordRequestDto request);
         Task<bool> DeactivateUserAsync(int userId);
+        Task<bool> DeleteUserAsync(int userId);
         Task<(bool Success, string TemporaryPassword)> ResetUserPasswordAsync(int userId);
         Task<bool> InitiatePasswordResetAsync(string email);
         Task<PasswordResetResult> ResetPasswordWithTokenAsync(string token, string newPassword);
@@ -66,11 +67,13 @@ namespace HoppyRoute.Application.Interfaces
 
     public interface IRouteService
     {
-        Task<RouteGenerationResponse> GenerateRouteAsync(RouteGenerationRequest request);
+        Task<RouteGenerationResponse> GenerateRouteAsync(RouteGenerationRequest request, int createdByUserId);
         Task<RouteDto> CreateRouteAsync(CreateRouteRequest request, int createdByUserId);
         Task<RouteDto?> UpdateRouteAsync(int routeId, UpdateRouteRequest request);
         Task<bool> DeleteRouteAsync(int routeId);
         Task<List<RouteDto>> GetRouteSuggestionsAsync(int zoneId);
+        Task<List<RouteDto>> GetRoutesForSwapperAsync(int swapperId, int? zoneId = null);
+        Task<List<RouteDto>> GetAllRoutesAsync();
         Task<List<RouteDto>> GetRoutesByRegionAsync(int regionId);
         Task<List<RouteDto>> GetRoutesByUserAsync(int userId);
         Task<RouteDto?> GetRouteByIdAsync(int routeId);

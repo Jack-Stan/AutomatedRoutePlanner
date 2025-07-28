@@ -18,7 +18,7 @@ namespace HoppyRoute.Application.Services
             _optimizationService = optimizationService;
         }
 
-        public async Task<RouteGenerationResponse> GenerateRouteAsync(RouteGenerationRequest request)
+        public async Task<RouteGenerationResponse> GenerateRouteAsync(RouteGenerationRequest request, int createdByUserId)
         {
             // Convert RouteGenerationRequest to CreateRouteRequest
             var createRequest = new CreateRouteRequest
@@ -59,7 +59,7 @@ namespace HoppyRoute.Application.Services
 
             try
             {
-                var route = await CreateOptimizedRouteAsync(createRequest);
+                var route = await CreateOptimizedRouteAsync(createRequest, createdByUserId);
                 return new RouteGenerationResponse
                 {
                     Success = true,
@@ -84,6 +84,43 @@ namespace HoppyRoute.Application.Services
             return await GetRoutesByZoneAsync(zoneId);
         }
 
+        public async Task<List<RouteDto>> GetRoutesForSwapperAsync(int swapperId, int? zoneId = null)
+        {
+            var query = _context.Routes
+                .Include(r => r.AssignedSwapper)
+                .Include(r => r.Zone)
+                .Include(r => r.Stops)
+                    .ThenInclude(s => s.Vehicle)
+                .Where(r => r.AssignedSwapperId == swapperId && 
+                           (r.Status == RouteStatus.Suggested || r.Status == RouteStatus.Confirmed || 
+                            r.Status == RouteStatus.InProgress || r.Status == RouteStatus.Completed));
+
+            // If zoneId is specified, filter by zone as well
+            if (zoneId.HasValue)
+            {
+                query = query.Where(r => r.ZoneId == zoneId.Value);
+            }
+
+            var routes = await query
+                .OrderByDescending(r => r.CreatedAt)
+                .ToListAsync();
+
+            return routes.Select(MapToRouteDto).ToList();
+        }
+
+        public async Task<List<RouteDto>> GetAllRoutesAsync()
+        {
+            var routes = await _context.Routes
+                .Include(r => r.AssignedSwapper)
+                .Include(r => r.Zone)
+                .Include(r => r.Stops)
+                    .ThenInclude(s => s.Vehicle)
+                .OrderByDescending(r => r.CreatedAt)
+                .ToListAsync();
+
+            return routes.Select(MapToRouteDto).ToList();
+        }
+
         public async Task<RouteDto?> GetTodaysRouteForSwapperAsync(int swapperId)
         {
             var today = DateTime.Today;
@@ -97,21 +134,36 @@ namespace HoppyRoute.Application.Services
             return route != null ? MapToRouteDto(route) : null;
         }
 
-        public async Task<RouteDto> CreateOptimizedRouteAsync(CreateRouteRequest request)
+        public async Task<RouteDto> CreateOptimizedRouteAsync(CreateRouteRequest request, int createdByUserId)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
+                // Check if the creator is a FleetManager or Admin
+                var createdByUser = await _context.Users.FindAsync(createdByUserId);
+                bool isFleetManagerOrAdmin = createdByUser?.Role == UserRole.FleetManager || createdByUser?.Role == UserRole.Admin;
+
                 // Create the route first
                 var route = new Route
                 {
+                    Name = request.Name,
+                    Description = request.Description,
                     AssignedSwapperId = request.AssignedSwapperId,
                     ZoneId = request.ZoneId,
                     Date = request.Date,
                     TargetDurationMinutes = request.TargetDurationMinutes,
-                    Status = RouteStatus.Suggested,
-                    CreatedAt = DateTime.UtcNow
+                    Status = isFleetManagerOrAdmin ? RouteStatus.Confirmed : RouteStatus.Suggested,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedByUserId = createdByUserId
                 };
+
+                // Auto-approve if created by FleetManager or Admin
+                if (isFleetManagerOrAdmin)
+                {
+                    route.ApprovedBy = createdByUserId;
+                    route.ApprovedAt = DateTime.UtcNow;
+                    route.ManagerNotes = "Auto-approved: Created by FleetManager";
+                }
 
                 _context.Routes.Add(route);
                 await _context.SaveChangesAsync();
@@ -183,7 +235,8 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
-                .Where(r => r.ZoneId == zoneId && r.Status == RouteStatus.Suggested)
+                .Where(r => r.ZoneId == zoneId && (r.Status == RouteStatus.Suggested || r.Status == RouteStatus.Confirmed || r.Status == RouteStatus.InProgress || r.Status == RouteStatus.Completed))
+                .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync();
 
             return routes.Select(MapToRouteDto).ToList();

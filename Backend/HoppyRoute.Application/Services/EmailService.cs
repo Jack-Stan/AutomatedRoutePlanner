@@ -62,6 +62,24 @@ namespace HoppyRoute.Application.Services
                 var subject = "Hoppy Route - Wachtwoord Reset";
                 var body = GeneratePasswordResetEmailBody(firstName, resetLink);
 
+                // Log email details for development
+                _logger.LogInformation("=== PASSWORD RESET EMAIL WORDT VERSTUURD ===");
+                _logger.LogInformation("Naar: {Email}", email);
+                _logger.LogInformation("Onderwerp: {Subject}", subject);
+                _logger.LogInformation("Reset Link: {ResetLink}", resetLink);
+                _logger.LogInformation("==========================================");
+                
+                // Check if we have valid SMTP settings before trying to send
+                if (string.IsNullOrEmpty(_emailSettings.SmtpHost) || 
+                    string.IsNullOrEmpty(_emailSettings.SmtpUsername) || 
+                    _emailSettings.SmtpUsername == "test@gmail.com")
+                {
+                    _logger.LogWarning("SMTP instellingen niet geconfigureerd. Password reset email wordt alleen gelogd.");
+                    // Simulate async operation for development
+                    await Task.Delay(100);
+                    return true;
+                }
+
                 return await SendEmailAsync(email, subject, body);
             }
             catch (Exception ex)

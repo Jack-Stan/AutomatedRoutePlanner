@@ -277,6 +277,15 @@ export default function UserManagementScreen() {
     } catch (error: any) {
       console.error('Error deleting user:', error);
       
+      // Check if it's a specific error about routes
+      if (error.response?.data?.message?.includes('gekoppeld is aan routes')) {
+        Alert.alert('Kan Gebruiker Niet Verwijderen', 'Deze gebruiker kan niet worden verwijderd omdat deze gekoppeld is aan routes.');
+      } else if (error.response?.data?.message?.includes('Admin gebruikers kunnen niet')) {
+        Alert.alert('Kan Admin Niet Verwijderen', 'Admin gebruikers kunnen niet worden verwijderd voor systeembeveiliging.');
+      } else {
+        Alert.alert('Fout bij Verwijderen', error.response?.data?.message || 'Er is een fout opgetreden bij het verwijderen van de gebruiker.');
+      }
+      
       // If deletion failed, we need to refresh to restore the user in the list
       fetchUsers();
       
@@ -369,41 +378,88 @@ export default function UserManagementScreen() {
     }
   };
 
-  const handleChangeZone = (userData: User) => {
-    // Available zones (in a real app, this would be fetched from API)
-    const availableZones = [
-      { id: 1, name: 'Gent Centrum' },
-      { id: 2, name: 'Gent Universiteit' },
-      { id: 3, name: 'Brussel Centrum' },
-      { id: 4, name: 'Antwerpen Centrum' },
-    ];
+  const handleChangeZone = async (userData: User) => {
+    try {
+      // For swappers, fetch available regions from API
+      if (userData.role === 2) { // BatterySwapper role
+        const regions = await apiService.getRegions();
+        
+        const buttons = [
+          ...regions.map(region => ({
+            text: region.name,
+            onPress: () => updateUserRegion(userData.id, region.id, region.name)
+          })),
+          { text: 'Geen regio', onPress: () => updateUserRegion(userData.id, null, 'Geen regio') },
+          { text: 'Annuleren', style: 'cancel' as const }
+        ];
 
-    const buttons = [
-      ...availableZones.map(zone => ({
-        text: zone.name,
-        onPress: () => updateUserZone(userData.id, zone.id, zone.name)
-      })),
-      { text: 'Annuleren', style: 'cancel' as const }
-    ];
+        Alert.alert(
+          'Regio Wijzigen',
+          `Selecteer een nieuwe regio voor ${userData.firstName} ${userData.lastName}:`,
+          buttons
+        );
+      } else {
+        // For other roles, fetch zones
+        const zones = await apiService.getZones();
+        
+        const buttons = [
+          ...zones.map(zone => ({
+            text: zone.name,
+            onPress: () => updateUserZone(userData.id, zone.id, zone.name)
+          })),
+          { text: 'Geen zone', onPress: () => updateUserZone(userData.id, null, 'Geen zone') },
+          { text: 'Annuleren', style: 'cancel' as const }
+        ];
 
-    Alert.alert(
-      'Zone Wijzigen',
-      `Selecteer een nieuwe zone voor ${userData.firstName} ${userData.lastName}:`,
-      buttons
-    );
+        Alert.alert(
+          'Zone Wijzigen',
+          `Selecteer een nieuwe zone voor ${userData.firstName} ${userData.lastName}:`,
+          buttons
+        );
+      }
+    } catch (error) {
+      console.error('Error fetching zones:', error);
+      Alert.alert('Fout', 'Kon zones niet ophalen');
+    }
   };
 
-  const updateUserZone = async (userId: number, zoneId: number, zoneName: string) => {
+  const updateUserZone = async (userId: number, zoneId: number | null, zoneName: string) => {
     try {
-      // In a real app, you would call an API endpoint to update user zone
-      // For now, we'll just show a confirmation and refresh the user list
+      // Call API to update user zone
+      await apiService.updateUser(userId, {
+        assignedZoneId: zoneId ?? undefined
+      });
+      
       Alert.alert(
         'Zone Gewijzigd',
         `Zone succesvol gewijzigd naar ${zoneName}`,
         [{ text: 'OK', onPress: () => fetchUsers() }]
       );
+      
+      showSuccess('Zone Gewijzigd', `Zone succesvol gewijzigd naar ${zoneName}`);
     } catch (error) {
+      console.error('Error updating user zone:', error);
       Alert.alert('Fout', 'Kon zone niet wijzigen');
+    }
+  };
+
+  const updateUserRegion = async (userId: number, regionId: number | null, regionName: string) => {
+    try {
+      // Call API to update user region
+      await apiService.updateUser(userId, {
+        assignedRegionId: regionId ?? undefined
+      });
+      
+      Alert.alert(
+        'Regio Gewijzigd',
+        `Regio succesvol gewijzigd naar ${regionName}`,
+        [{ text: 'OK', onPress: () => fetchUsers() }]
+      );
+      
+      showSuccess('Regio Gewijzigd', `Regio succesvol gewijzigd naar ${regionName}`);
+    } catch (error) {
+      console.error('Error updating user region:', error);
+      Alert.alert('Fout', 'Kon regio niet wijzigen');
     }
   };
 
@@ -424,7 +480,7 @@ export default function UserManagementScreen() {
           >
             <Ionicons name="pencil" size={20} color={HoppyColors.primary} />
           </TouchableOpacity>
-          {/* Hide delete button for admin users */}
+          
           {userData.roleName?.toLowerCase() !== 'admin' && (
             <TouchableOpacity
               style={[styles.actionButton, styles.deleteButton]}

@@ -139,7 +139,7 @@ namespace HoppyRoute.Application.Services
         {
             var query = _context.Vehicles
                 .Include(v => v.Zone)
-                .ThenInclude(z => z.Region)
+                .ThenInclude(z => z!.Region)
                 .Where(v => v.Zone != null && v.Zone.RegionId == request.RegionId);
 
             if (request.BatteryThreshold.HasValue)

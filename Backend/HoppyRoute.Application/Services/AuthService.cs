@@ -39,6 +39,7 @@ namespace HoppyRoute.Application.Services
             
             var user = await _context.Users
                 .Include(u => u.AssignedZone)
+                .Include(u => u.AssignedRegion)
                 .FirstOrDefaultAsync(u => u.Username == request.Username && u.IsActive);
 
             Console.WriteLine($"User found: {user != null}");
@@ -127,6 +128,7 @@ namespace HoppyRoute.Application.Services
             // Reload with zone info
             user = await _context.Users
                 .Include(u => u.AssignedZone)
+                .Include(u => u.AssignedRegion)
                 .FirstAsync(u => u.Id == user.Id);
 
             // Send email with username and temporary password
@@ -153,6 +155,7 @@ namespace HoppyRoute.Application.Services
         {
             var user = await _context.Users
                 .Include(u => u.AssignedZone)
+                .Include(u => u.AssignedRegion)
                 .FirstOrDefaultAsync(u => u.Id == userId);
 
             if (user == null)
@@ -167,6 +170,7 @@ namespace HoppyRoute.Application.Services
         {
             var query = _context.Users
                 .Include(u => u.AssignedZone)
+                .Include(u => u.AssignedRegion)
                 .Where(u => u.Role == role);
 
             if (createdByUserId.HasValue)
@@ -182,6 +186,7 @@ namespace HoppyRoute.Application.Services
         {
             var user = await _context.Users
                 .Include(u => u.AssignedZone)
+                .Include(u => u.AssignedRegion)
                 .FirstOrDefaultAsync(u => u.Id == userId);
 
             if (user == null)
@@ -214,11 +219,22 @@ namespace HoppyRoute.Application.Services
                 user.AssignedZoneId = request.AssignedZoneId.Value;
             }
 
+            if (request.AssignedRegionId.HasValue)
+            {
+                user.AssignedRegionId = request.AssignedRegionId.Value;
+            }
+
+            if (request.Role.HasValue)
+            {
+                user.Role = request.Role.Value;
+            }
+
             await _context.SaveChangesAsync();
 
-            // Reload with updated zone info
+            // Reload with updated zone and region info
             user = await _context.Users
                 .Include(u => u.AssignedZone)
+                .Include(u => u.AssignedRegion)
                 .FirstAsync(u => u.Id == userId);
 
             return MapToUserDto(user);
@@ -267,6 +283,33 @@ namespace HoppyRoute.Application.Services
             }
 
             user.IsActive = false;
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
+        public async Task<bool> DeleteUserAsync(int userId)
+        {
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return false;
+            }
+
+            // Prevent deleting admin users (protect system integrity)
+            if (user.Role == UserRole.Admin)
+            {
+                throw new InvalidOperationException("Admin gebruikers kunnen niet worden verwijderd");
+            }
+
+            // Check if user is referenced in routes
+            var hasRoutes = await _context.Routes.AnyAsync(r => r.AssignedSwapperId == userId || r.CreatedByUserId == userId || r.ApprovedBy == userId);
+            if (hasRoutes)
+            {
+                throw new InvalidOperationException("Gebruiker kan niet worden verwijderd omdat deze gekoppeld is aan routes");
+            }
+
+            _context.Users.Remove(user);
             await _context.SaveChangesAsync();
 
             return true;
@@ -329,7 +372,7 @@ namespace HoppyRoute.Application.Services
                 {
                     new Claim("sub", user.Id.ToString()),
                     new Claim("username", user.Username),
-                    new Claim("role", user.Role.ToString()),
+                    new Claim("role", ((UserRole)user.Role).ToString()),
                     new Claim("zoneId", user.AssignedZoneId?.ToString() ?? "")
                 }),
                 Expires = DateTime.UtcNow.AddHours(_jwtExpirationHours),
@@ -389,6 +432,8 @@ namespace HoppyRoute.Application.Services
                 LastLoginAt = user.LastLoginAt,
                 AssignedZoneId = user.AssignedZoneId,
                 AssignedZoneName = user.AssignedZone?.Name,
+                AssignedRegionId = user.AssignedRegionId,
+                AssignedRegionName = user.AssignedRegion?.Name,
                 IsTemporaryPassword = user.IsTemporaryPassword,
                 HasCompletedFirstLogin = user.HasCompletedFirstLogin
             };

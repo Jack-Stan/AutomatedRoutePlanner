@@ -61,10 +61,19 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:5173", "http://localhost:8081", "http://localhost:19006")
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.AllowAnyOrigin()
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        }
+        else
+        {
+            policy.WithOrigins("http://localhost:3000", "http://localhost:5173", "http://localhost:8081", "http://localhost:8082", "http://localhost:19006")
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        }
     });
 });
 
@@ -90,8 +99,7 @@ using (var scope = app.Services.CreateScope())
     var context = scope.ServiceProvider.GetRequiredService<HoppyDbContext>();
     try
     {
-        // Delete existing database and recreate with all tables including Users
-        context.Database.EnsureDeleted();
+        // Only create database if it doesn't exist - don't delete existing data
         context.Database.EnsureCreated();
         
         // Check if we need to seed admin user
@@ -113,6 +121,63 @@ using (var scope = app.Services.CreateScope())
             context.Users.Add(adminUser);
             context.SaveChanges();
             Console.WriteLine("Admin user created successfully!");
+            
+            // Create a test swapper user
+            var swapperUser = new HoppyRoute.Domain.Entities.User
+            {
+                Username = "swapper1",
+                Email = "swapper1@hoppy.be",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Swapper2024!", 12),
+                Role = HoppyRoute.Domain.Enums.UserRole.BatterySwapper,
+                FirstName = "Test",
+                LastName = "Swapper",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            context.Users.Add(swapperUser);
+            context.SaveChanges();
+            Console.WriteLine("Test swapper user created successfully!");
+        }
+
+        // Seed regions first
+        if (!context.Regions.Any())
+        {
+            var regions = new List<HoppyRoute.Domain.Entities.Region>
+            {
+                // België
+                new() { Name = "Cadzand", Country = "België", CountryCode = "BE", Description = "Kustgebied", Latitude = 51.3667, Longitude = 3.3917 },
+                new() { Name = "Kortrijk", Country = "België", CountryCode = "BE", Description = "West-Vlaanderen", Latitude = 50.8240, Longitude = 3.2650 },
+                new() { Name = "Kempen", Country = "België", CountryCode = "BE", Description = "Antwerpen/Limburg", Latitude = 51.1000, Longitude = 5.0000 },
+                new() { Name = "Sint-Niklaas", Country = "België", CountryCode = "BE", Description = "Oost-Vlaanderen", Latitude = 51.1667, Longitude = 4.1333 },
+                new() { Name = "Genk", Country = "België", CountryCode = "BE", Description = "Limburg", Latitude = 50.9667, Longitude = 5.5000 },
+                new() { Name = "Mechelen", Country = "België", CountryCode = "BE", Description = "Antwerpen", Latitude = 51.0275, Longitude = 4.4775 },
+                new() { Name = "Blankenberge", Country = "België", CountryCode = "BE", Description = "West-Vlaanderen Kust", Latitude = 51.3133, Longitude = 3.1317 },
+                new() { Name = "Dender en Vlaamse Ardennen", Country = "België", CountryCode = "BE", Description = "Oost-Vlaanderen", Latitude = 50.7667, Longitude = 3.8833 },
+                
+                // Spanje
+                new() { Name = "Torrevieja", Country = "Spanje", CountryCode = "ES", Description = "Costa Blanca", Latitude = 37.9785, Longitude = -0.6820 },
+                new() { Name = "Orihuela", Country = "Spanje", CountryCode = "ES", Description = "Alicante", Latitude = 38.0833, Longitude = -0.9500 },
+                new() { Name = "Albir", Country = "Spanje", CountryCode = "ES", Description = "Alfaz del Pi", Latitude = 38.5333, Longitude = 0.0167 },
+                new() { Name = "Lanzarote", Country = "Spanje", CountryCode = "ES", Description = "Canarische Eilanden", Latitude = 29.0469, Longitude = -13.5896 },
+                new() { Name = "Altea", Country = "Spanje", CountryCode = "ES", Description = "Costa Blanca", Latitude = 38.5995, Longitude = -0.0439 },
+                new() { Name = "La Nucia", Country = "Spanje", CountryCode = "ES", Description = "Alicante", Latitude = 38.6225, Longitude = -0.1308 },
+                new() { Name = "Fuerteventura", Country = "Spanje", CountryCode = "ES", Description = "Canarische Eilanden", Latitude = 28.3587, Longitude = -14.0537 },
+                new() { Name = "Tenerife", Country = "Spanje", CountryCode = "ES", Description = "Canarische Eilanden", Latitude = 28.2916, Longitude = -16.6291 },
+                
+                // Griekenland
+                new() { Name = "Rhodos", Country = "Griekenland", CountryCode = "GR", Description = "Dodekanesos", Latitude = 36.4341, Longitude = 28.2176 },
+                new() { Name = "Kos", Country = "Griekenland", CountryCode = "GR", Description = "Dodekanesos", Latitude = 36.8928, Longitude = 27.2881 },
+                new() { Name = "Corfu", Country = "Griekenland", CountryCode = "GR", Description = "Ionische Eilanden", Latitude = 39.6243, Longitude = 19.9217 },
+                new() { Name = "Rethymnon", Country = "Griekenland", CountryCode = "GR", Description = "Kreta", Latitude = 35.3662, Longitude = 24.4824 },
+                
+                // Gibraltar
+                new() { Name = "Gibraltar", Country = "Gibraltar", CountryCode = "GI", Description = "Britse Overzee Gebieden", Latitude = 36.1408, Longitude = -5.3536 }
+            };
+
+            context.Regions.AddRange(regions);
+            context.SaveChanges();
+            Console.WriteLine($"Regions seeded successfully! Added {regions.Count} regions.");
         }
 
         // Seed zones with realistic Hoppy regions: each region gets 10 zones
@@ -120,39 +185,7 @@ using (var scope = app.Services.CreateScope())
         {
             var zones = new List<Zone>();
             var random = new Random();
-            
-            // Define real Hoppy regions with base coordinates
-            var regions = new[]
-            {
-                // België
-                new { Name = "Cadzand", CountryCode = "BE", BaseLat = 51.3667, BaseLng = 3.3917 },
-                new { Name = "Kortrijk", CountryCode = "BE", BaseLat = 50.8240, BaseLng = 3.2650 },
-                new { Name = "Kempen", CountryCode = "BE", BaseLat = 51.1000, BaseLng = 5.0000 },
-                new { Name = "Sint-Niklaas", CountryCode = "BE", BaseLat = 51.1667, BaseLng = 4.1333 },
-                new { Name = "Genk", CountryCode = "BE", BaseLat = 50.9667, BaseLng = 5.5000 },
-                new { Name = "Mechelen", CountryCode = "BE", BaseLat = 51.0275, BaseLng = 4.4775 },
-                new { Name = "Blankenberge", CountryCode = "BE", BaseLat = 51.3133, BaseLng = 3.1317 },
-                new { Name = "Dender en Vlaamse Ardennen", CountryCode = "BE", BaseLat = 50.7667, BaseLng = 3.8833 },
-                
-                // Spanje
-                new { Name = "Torrevieja", CountryCode = "ES", BaseLat = 37.9785, BaseLng = -0.6820 },
-                new { Name = "Orihuela", CountryCode = "ES", BaseLat = 38.0833, BaseLng = -0.9500 },
-                new { Name = "Albir", CountryCode = "ES", BaseLat = 38.5333, BaseLng = 0.0167 },
-                new { Name = "Lanzarote", CountryCode = "ES", BaseLat = 29.0469, BaseLng = -13.5896 },
-                new { Name = "Altea", CountryCode = "ES", BaseLat = 38.5995, BaseLng = -0.0439 },
-                new { Name = "La Nucia", CountryCode = "ES", BaseLat = 38.6225, BaseLng = -0.1308 },
-                new { Name = "Fuerteventura", CountryCode = "ES", BaseLat = 28.3587, BaseLng = -14.0537 },
-                new { Name = "Tenerife", CountryCode = "ES", BaseLat = 28.2916, BaseLng = -16.6291 },
-                
-                // Griekenland
-                new { Name = "Rhodos", CountryCode = "GR", BaseLat = 36.4341, BaseLng = 28.2176 },
-                new { Name = "Kos", CountryCode = "GR", BaseLat = 36.8928, BaseLng = 27.2881 },
-                new { Name = "Corfu", CountryCode = "GR", BaseLat = 39.6243, BaseLng = 19.9217 },
-                new { Name = "Rethymnon", CountryCode = "GR", BaseLat = 35.3662, BaseLng = 24.4824 },
-                
-                // Gibraltar
-                new { Name = "Gibraltar", CountryCode = "GI", BaseLat = 36.1408, BaseLng = -5.3536 }
-            };
+            var regions = context.Regions.ToList();
 
             var zoneTypes = new[] { "Centrum", "Station", "Haven", "Strand", "Winkelcentrum", "Woonwijk", "Industriegebied", "Park", "Sportcomplex", "Toeristische Zone" };
 
@@ -160,12 +193,12 @@ using (var scope = app.Services.CreateScope())
             {
                 for (int i = 0; i < 10; i++)
                 {
-                    // Create zone boundaries with small offsets from base coordinates
+                    // Create zone boundaries with small offsets from region base coordinates
                     var offsetLat = (random.NextDouble() - 0.5) * 0.02; // ±0.01 degrees (~1km)
                     var offsetLng = (random.NextDouble() - 0.5) * 0.02; // ±0.01 degrees (~1km)
                     
-                    var zoneLat = region.BaseLat + offsetLat;
-                    var zoneLng = region.BaseLng + offsetLng;
+                    var zoneLat = region.Latitude.GetValueOrDefault() + offsetLat;
+                    var zoneLng = region.Longitude.GetValueOrDefault() + offsetLng;
                     
                     // Create small zone boundary (approximately 200m x 200m)
                     var zoneSize = 0.002; // ~200 meters
@@ -174,6 +207,7 @@ using (var scope = app.Services.CreateScope())
                     {
                         Name = $"{region.Name} {zoneTypes[i]}",
                         CountryCode = region.CountryCode,
+                        RegionId = region.Id, // Correctly link to region
                         GeoJsonBoundary = $@"{{
                             ""type"": ""Polygon"",
                             ""coordinates"": [[
@@ -190,7 +224,7 @@ using (var scope = app.Services.CreateScope())
 
             context.Zones.AddRange(zones);
             context.SaveChanges();
-            Console.WriteLine($"Zones seeded successfully! Added {zones.Count} zones across {regions.Length} Hoppy regions (10 zones per region).");
+            Console.WriteLine($"Zones seeded successfully! Added {zones.Count} zones across {regions.Count} Hoppy regions (10 zones per region).");
         }
         
         // Seed vehicles distributed across zones: 50 vehicles per zone (45 in-zone + 5 out-of-zone)

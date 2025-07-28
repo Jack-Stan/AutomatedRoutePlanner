@@ -15,6 +15,8 @@ export interface User {
   lastLoginAt?: string;
   assignedZoneId?: number;
   assignedZoneName?: string;
+  assignedRegionId?: number;
+  assignedRegionName?: string;
   isTemporaryPassword: boolean; // New field for temporary password status
   hasCompletedFirstLogin: boolean; // New field to track first login completion
 }

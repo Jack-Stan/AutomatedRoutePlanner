@@ -21,7 +21,7 @@ import { HoppyColors, HoppyTheme } from '../theme';
 import { apiService, RouteDto } from '../services/api';
 import { RootStackParamList, BottomTabParamList } from '../types';
 import { HoppyButton, HoppyLogo } from '../components';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, isAdmin, isFleetManager } from '../contexts/AuthContext';
 
 type RoutesScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<BottomTabParamList, 'Routes'>,
@@ -30,10 +30,11 @@ type RoutesScreenNavigationProp = CompositeNavigationProp<
 
 // Route Status enum (matching backend)
 enum RouteStatus {
-  Pending = 0,
-  InProgress = 1,
-  Completed = 2,
-  Cancelled = 3
+  Suggested = 0,
+  Confirmed = 1,
+  InProgress = 2,
+  Completed = 3,
+  Cancelled = 4
 }
 
 export default function RoutesScreen() {
@@ -59,12 +60,29 @@ export default function RoutesScreen() {
       setLoading(true);
       setError(null);
       
-      // Fetch route suggestions for the selected zone
-      const routeData = await apiService.getRouteSuggestions(selectedZoneId);
+      // Check if user is admin or fleet manager - if so, fetch all routes, otherwise fetch by zone
+      let routeData;
+      if (isAdmin(user) || isFleetManager(user)) {
+        routeData = await apiService.getAllRoutes();
+      } else {
+        // Fetch route suggestions for the selected zone
+        routeData = await apiService.getRouteSuggestions(selectedZoneId);
+      }
+      
       setRoutes(routeData);
     } catch (err: any) {
       console.error('Error fetching routes:', err);
-      setError(err.response?.data?.message || err.message || 'Fout bij ophalen van routes');
+      
+      let errorMessage = 'Fout bij ophalen van routes';
+      if (err.response?.status === 403) {
+        errorMessage = 'Geen toegang tot routes. Log uit en opnieuw in om uw toegang te vernieuwen.';
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -100,8 +118,10 @@ export default function RoutesScreen() {
 
   const getStatusColor = (status: RouteStatus) => {
     switch (status) {
-      case RouteStatus.Pending:
+      case RouteStatus.Suggested:
         return HoppyColors.pending;
+      case RouteStatus.Confirmed:
+        return HoppyColors.success;
       case RouteStatus.InProgress:
         return HoppyColors.active;
       case RouteStatus.Completed:
@@ -115,8 +135,10 @@ export default function RoutesScreen() {
 
   const getStatusText = (status: RouteStatus) => {
     switch (status) {
-      case RouteStatus.Pending:
-        return 'In afwachting';
+      case RouteStatus.Suggested:
+        return 'Suggestie';
+      case RouteStatus.Confirmed:
+        return 'Bevestigd';
       case RouteStatus.InProgress:
         return 'Onderweg';
       case RouteStatus.Completed:
@@ -177,7 +199,7 @@ export default function RoutesScreen() {
         </View>
       </View>
 
-      {item.status === RouteStatus.Pending && (
+      {item.status === RouteStatus.Suggested && (
         <View style={{ marginTop: HoppyTheme.spacing.md }}>
           <HoppyButton
             title="Route Bevestigen"

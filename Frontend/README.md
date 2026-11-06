@@ -180,7 +180,5 @@ Voor vragen of problemen, check:
 - Redux Toolkit: https://redux-toolkit.js.org
 
 
-Default Login Gegevens:
-Username: admin
-Password: ***REMOVED***
-Role: Administrator
+Inloggegevens:
+Er zijn geen standaard-wachtwoorden. Log in als `admin` met het wachtwoord dat je in de backend instelt via `Seed__AdminPassword` (zie de hoofd-README, sectie "Secrets and configuration").

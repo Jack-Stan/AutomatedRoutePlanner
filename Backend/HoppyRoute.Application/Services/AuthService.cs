@@ -28,7 +28,9 @@ namespace HoppyRoute.Application.Services
             _context = context;
             _configuration = configuration;
             _emailService = emailService;
-            _jwtSecret = _configuration["Jwt:Secret"] ?? "***REMOVED***"; // Fallback for development
+            _jwtSecret = _configuration["Jwt:Secret"] ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(_jwtSecret))
+                throw new InvalidOperationException("Jwt:Secret is not configured. Set the Jwt__Secret environment variable.");
             _jwtIssuer = _configuration["Jwt:Issuer"] ?? "HoppyApp";
             _jwtExpirationHours = int.Parse(_configuration["Jwt:ExpirationHours"] ?? "24");
         }
@@ -42,17 +44,10 @@ namespace HoppyRoute.Application.Services
                 .Include(u => u.AssignedRegion)
                 .FirstOrDefaultAsync(u => u.Username == request.Username && u.IsActive);
 
-            Console.WriteLine($"User found: {user != null}");
-            if (user != null)
-            {
-                Console.WriteLine($"User ID: {user.Id}, Username: {user.Username}, IsActive: {user.IsActive}");
-                Console.WriteLine($"Password hash from DB: {user.PasswordHash}");
-                
-                var passwordValid = VerifyPassword(request.Password, user.PasswordHash);
-                Console.WriteLine($"Password verification result: {passwordValid}");
-            }
+            var passwordValid = user != null && VerifyPassword(request.Password, user.PasswordHash);
+            Console.WriteLine($"Login {(passwordValid ? "succeeded" : "failed")} for username: {request.Username}");
 
-            if (user == null || !VerifyPassword(request.Password, user.PasswordHash))
+            if (user == null || !passwordValid)
             {
                 throw new UnauthorizedAccessException("Ongeldige inloggegevens");
             }
@@ -391,14 +386,9 @@ namespace HoppyRoute.Application.Services
 
         private bool VerifyPassword(string password, string hash)
         {
-            Console.WriteLine($"Verifying password. Input password: '{password}'");
-            Console.WriteLine($"Against hash: '{hash}'");
-            
             try 
             {
-                var result = BCrypt.Net.BCrypt.Verify(password, hash);
-                Console.WriteLine($"BCrypt verification result: {result}");
-                return result;
+                return BCrypt.Net.BCrypt.Verify(password, hash);
             }
             catch (Exception ex)
             {

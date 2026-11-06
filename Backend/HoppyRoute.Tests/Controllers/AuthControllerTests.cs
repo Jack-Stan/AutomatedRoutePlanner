@@ -18,8 +18,18 @@ namespace HoppyRoute.Tests.Controllers
         private readonly WebApplicationFactory<Program> _factory;
         private readonly HttpClient _client;
 
+        // Test-only signing key (not a real secret). Program.cs refuses to start without
+        // Jwt:Secret, and appsettings.json no longer ships one. Set via an environment
+        // variable because Program reads it before the host is built.
+        private const string TestJwtSecret = "test-only-jwt-signing-key-not-a-real-secret-0123456789";
+
         public AuthControllerTests(WebApplicationFactory<Program> factory)
         {
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("Jwt__Secret")))
+            {
+                Environment.SetEnvironmentVariable("Jwt__Secret", TestJwtSecret);
+            }
+
             _factory = factory.WithWebHostBuilder(builder =>
             {
                 builder.ConfigureServices(services =>

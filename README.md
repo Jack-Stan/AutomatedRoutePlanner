@@ -69,7 +69,7 @@ The application will automatically create and seed the database with:
 - 23 regions across Europe
 - 10 zones per region (200m x 200m coverage)
 - 50 vehicles per zone (45 in-zone, 5 out-of-zone)
-- Admin user credentials
+- An initial `admin` user (and a test `swapper1` user), only if their seed passwords are configured (see Configuration)
 
 ## 🧪 Testing
 
@@ -87,9 +87,35 @@ npm test
 
 ## 🔧 Configuration
 
-### Default Admin Credentials
-- Username: `admin`
-- Password: `admin123`
+### Secrets and configuration
+No secrets are stored in `appsettings*.json`. Supply them through configuration overrides; ASP.NET Core
+maps environment variables with `__` onto the `:` sections automatically.
+
+| Setting | Environment variable | Notes |
+|---|---|---|
+| `Jwt:Secret` | `Jwt__Secret` | JWT signing key, at least 32 characters. Required; the API refuses to start without it. |
+| `EmailSettings:SmtpPassword` | `EmailSettings__SmtpPassword` | SMTP password (for Gmail: an app password). Needed only for sending mail. |
+| `Seed:AdminPassword` | `Seed__AdminPassword` | Password for the initial `admin` user, used only when the Users table is empty. If unset, no admin is seeded. |
+| `Seed:SwapperPassword` | `Seed__SwapperPassword` | Password for the test `swapper1` user, same rule. Optional. |
+
+Example (bash, local dev):
+
+```bash
+export Jwt__Secret="$(openssl rand -base64 48)"
+export Seed__AdminPassword="<choose-a-strong-password>"
+cd Backend/HoppyRouteApi && dotnet run
+```
+
+Or keep them in user-secrets, outside the repo:
+
+```bash
+cd Backend/HoppyRouteApi
+dotnet user-secrets init
+dotnet user-secrets set "Jwt:Secret" "<random key, 32+ chars>"
+dotnet user-secrets set "Seed:AdminPassword" "<choose-a-strong-password>"
+```
+
+There are no default credentials: log in as `admin` with the password you set in `Seed:AdminPassword`.
 
 ### API Endpoints
 - Base URL: `https://localhost:7001/api`

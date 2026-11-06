@@ -20,7 +20,13 @@ builder.Services.AddDbContext<HoppyDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // JWT Configuration
-var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "HoppySecretKey123!@#$%^&*()_+";
+// Secrets are not stored in appsettings.json: supply them via environment variables
+// (Jwt__Secret, EmailSettings__SmtpPassword, Seed__AdminPassword, ...) or dotnet user-secrets.
+var jwtSecret = builder.Configuration["Jwt:Secret"];
+if (string.IsNullOrWhiteSpace(jwtSecret) || Encoding.ASCII.GetByteCount(jwtSecret) < 32)
+    throw new InvalidOperationException(
+        "Jwt:Secret is not configured or shorter than 32 characters (HS256 needs at least 256 bits). " +
+        "Set the Jwt__Secret environment variable (or use dotnet user-secrets).");
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "HoppyApp";
 
 builder.Services.AddAuthentication(options =>
@@ -105,39 +111,54 @@ using (var scope = app.Services.CreateScope())
         // Check if we need to seed admin user
         if (!context.Users.Any())
         {
-            // Create admin user with properly hashed password
-            var adminUser = new HoppyRoute.Domain.Entities.User
-            {
-                Username = "admin",
-                Email = "admin@hoppy.be",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("HoppyAdmin2024!", 12),
-                Role = HoppyRoute.Domain.Enums.UserRole.Admin,
-                FirstName = "Hoppy",
-                LastName = "Administrator",
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
+            // Seed passwords come from configuration (Seed__AdminPassword / Seed__SwapperPassword),
+            // never from source. A user is only seeded when its password is configured.
+            var seedAdminPassword = app.Configuration["Seed:AdminPassword"];
+            var seedSwapperPassword = app.Configuration["Seed:SwapperPassword"];
 
-            context.Users.Add(adminUser);
-            context.SaveChanges();
-            Console.WriteLine("Admin user created successfully!");
-            
-            // Create a test swapper user
-            var swapperUser = new HoppyRoute.Domain.Entities.User
+            if (string.IsNullOrWhiteSpace(seedAdminPassword))
             {
-                Username = "swapper1",
-                Email = "swapper1@hoppy.be",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Swapper2024!", 12),
-                Role = HoppyRoute.Domain.Enums.UserRole.BatterySwapper,
-                FirstName = "Test",
-                LastName = "Swapper",
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
+                Console.WriteLine("No users exist and Seed:AdminPassword is not set: skipping admin seed. Set Seed__AdminPassword to create the initial admin.");
+            }
+            else
+            {
+                // Create admin user with properly hashed password
+                var adminUser = new HoppyRoute.Domain.Entities.User
+                {
+                    Username = "admin",
+                    Email = "admin@hoppy.be",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(seedAdminPassword, 12),
+                    Role = HoppyRoute.Domain.Enums.UserRole.Admin,
+                    FirstName = "Hoppy",
+                    LastName = "Administrator",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
 
-            context.Users.Add(swapperUser);
-            context.SaveChanges();
-            Console.WriteLine("Test swapper user created successfully!");
+                context.Users.Add(adminUser);
+                context.SaveChanges();
+                Console.WriteLine("Admin user created successfully!");
+            }
+
+            if (!string.IsNullOrWhiteSpace(seedSwapperPassword))
+            {
+                // Create a test swapper user
+                var swapperUser = new HoppyRoute.Domain.Entities.User
+                {
+                    Username = "swapper1",
+                    Email = "swapper1@hoppy.be",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(seedSwapperPassword, 12),
+                    Role = HoppyRoute.Domain.Enums.UserRole.BatterySwapper,
+                    FirstName = "Test",
+                    LastName = "Swapper",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                context.Users.Add(swapperUser);
+                context.SaveChanges();
+                Console.WriteLine("Test swapper user created successfully!");
+            }
         }
 
         // Seed regions first

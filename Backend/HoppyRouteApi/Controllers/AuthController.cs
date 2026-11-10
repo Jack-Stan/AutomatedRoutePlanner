@@ -138,9 +138,16 @@ namespace HoppyRouteApi.Controllers
         }
 
         [HttpGet("users")]
-        [Authorize(Roles = AdminRole)]
+        [Authorize(Roles = Roles.Managers)]
         public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers([FromQuery] UserRole? role, [FromQuery] int? zoneId)
         {
+            // Admin: any list. FleetManager: only the swapper list (role=BatterySwapper), which the
+            // route-generation screen needs to assign a route; every other user stays admin-only.
+            if (!User.IsInRole(AdminRole) && role != UserRole.BatterySwapper)
+            {
+                return Forbid();
+            }
+
             try
             {
                 IEnumerable<UserDto> users;

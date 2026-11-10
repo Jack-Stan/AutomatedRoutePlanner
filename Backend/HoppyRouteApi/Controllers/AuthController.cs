@@ -11,6 +11,9 @@ namespace HoppyRouteApi.Controllers
     [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
+        // Role names match the "role" claim AuthService puts in the JWT (UserRole.ToString()).
+        private const string AdminRole = nameof(UserRole.Admin);
+
         private readonly IAuthService _authService;
 
         public AuthController(IAuthService authService)
@@ -37,13 +40,13 @@ namespace HoppyRouteApi.Controllers
         }
 
         [HttpPost("users")]
-        // Temporarily removed [Authorize] for debugging
+        [Authorize(Roles = AdminRole)]
         public async Task<ActionResult<UserDto>> CreateUser([FromBody] CreateUserRequestDto request)
         {
             try
             {
-                // For debugging, we'll use the seeded admin user ID (1)
-                var currentUserId = 1; // This should be the admin user created in seeding
+                // The creator is whoever the token says it is, never a fixed id.
+                var currentUserId = GetCurrentUserId();
                 var result = await _authService.CreateUserAsync(request, currentUserId);
                 return Ok(result);
             }
@@ -81,6 +84,19 @@ namespace HoppyRouteApi.Controllers
         [Authorize]
         public async Task<ActionResult<UserDto>> GetUser(int id)
         {
+            // Admins may read anyone; everyone else only their own record.
+            if (!User.IsInRole(AdminRole))
+            {
+                int callerId;
+                try { callerId = GetCurrentUserId(); }
+                catch (UnauthorizedAccessException ex) { return Unauthorized(new { message = ex.Message }); }
+
+                if (callerId != id)
+                {
+                    return Forbid();
+                }
+            }
+
             try
             {
                 var user = await _authService.GetUserByIdAsync(id);
@@ -97,7 +113,7 @@ namespace HoppyRouteApi.Controllers
         }
 
         [HttpGet("users")]
-        // Temporarily removed [Authorize] for debugging
+        [Authorize(Roles = AdminRole)]
         public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers([FromQuery] UserRole? role, [FromQuery] int? zoneId)
         {
             try
@@ -116,7 +132,7 @@ namespace HoppyRouteApi.Controllers
                 }
                 else
                 {
-                    // Return all users for debugging
+                    // No role filter: return users of every role
                     var allUsers = new List<UserDto>();
                     foreach (UserRole userRole in Enum.GetValues<UserRole>())
                     {
@@ -141,7 +157,7 @@ namespace HoppyRouteApi.Controllers
         }
 
         [HttpPut("users/{id}")]
-        // [Authorize] - Temporarily disabled for debugging
+        [Authorize(Roles = AdminRole)]
         public async Task<ActionResult<UserDto>> UpdateUser(int id, [FromBody] UpdateUserRequestDto request)
         {
             try
@@ -160,14 +176,11 @@ namespace HoppyRouteApi.Controllers
         }
 
         [HttpPost("users/change-password")]
-        // [Authorize] - Temporarily disabled for debugging
+        [Authorize]
         public async Task<ActionResult> ChangePassword([FromBody] ChangePasswordRequestDto request)
         {
             try
             {
-                // Log request data for debugging
-                Console.WriteLine($"Change password request: CurrentPassword length: {request?.CurrentPassword?.Length}, NewPassword length: {request?.NewPassword?.Length}");
-                
                 if (request == null)
                 {
                     return BadRequest(new { message = "Request data is null" });
@@ -183,19 +196,9 @@ namespace HoppyRouteApi.Controllers
                     return BadRequest(new { message = "New password is required" });
                 }
                 
-                // For debugging, try to get the user ID from the auth token or use a default
-                int userId;
-                try
-                {
-                    userId = GetCurrentUserId();
-                    Console.WriteLine($"Got user ID from token: {userId}");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Could not get user ID from token: {ex.Message}. Using default admin user ID.");
-                    userId = 1; // Fall back to admin user for debugging
-                }
-                
+                // Always the authenticated user; a token without a usable id is a 401 (no fallback user).
+                var userId = GetCurrentUserId();
+
                 var result = await _authService.ChangePasswordAsync(userId, request);
                 
                 if (result)
@@ -216,7 +219,7 @@ namespace HoppyRouteApi.Controllers
         }
 
         [HttpDelete("users/{id}")]
-        [Authorize]
+        [Authorize(Roles = AdminRole)]
         public async Task<ActionResult> DeactivateUser(int id)
         {
             try
@@ -241,7 +244,7 @@ namespace HoppyRouteApi.Controllers
         }
 
         [HttpDelete("users/{id}/permanent")]
-        [Authorize]
+        [Authorize(Roles = AdminRole)]
         public async Task<ActionResult> DeleteUser(int id)
         {
             try
@@ -280,7 +283,7 @@ namespace HoppyRouteApi.Controllers
         }
 
         [HttpGet("users/count")]
-        // Temporarily removed [Authorize] for debugging
+        [Authorize(Roles = AdminRole)]
         public async Task<IActionResult> GetUsersCount()
         {
             try
@@ -294,25 +297,8 @@ namespace HoppyRouteApi.Controllers
             }
         }
 
-        [HttpPost("test-email")]
-        public async Task<IActionResult> TestEmail([FromBody] TestEmailRequestDto request)
-        {
-            try
-            {
-                var result = await _authService.TestEmailAsync(request.Email, request.FirstName, request.LastName, request.Username, request.TemporaryPassword);
-                return Ok(new { 
-                    success = result, 
-                    message = result ? "Test email verstuurd!" : "Email verzenden mislukt. Check de logs voor meer informatie." 
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Er is een fout opgetreden", error = ex.Message });
-            }
-        }
-
         [HttpPost("users/{id}/reset-password")]
-        [Authorize]
+        [Authorize(Roles = AdminRole)]
         public async Task<ActionResult> ResetUserPassword(int id)
         {
             try

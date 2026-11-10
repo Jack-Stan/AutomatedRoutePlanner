@@ -139,6 +139,8 @@ De EmailService logt automatisch:
 
 Logs zijn beschikbaar in de console en kunnen worden geconfigureerd via `appsettings.json`.
 
+Tijdelijke wachtwoorden, reset-links en email bodies worden nooit gelogd. Zonder SMTP-configuratie wordt de email niet verzonden; gebruik MailHog (zie hierboven) om lokaal de inhoud te zien.
+
 ## Implementatie Status
 
 ### ✅ Voltooid

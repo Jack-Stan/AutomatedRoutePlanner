@@ -21,7 +21,6 @@ namespace HoppyRoute.Application.Interfaces
         Task<bool> ValidateTokenAsync(string token);
         Task<UserDto?> GetUserFromTokenAsync(string token);
         Task<int> GetUsersCountAsync();
-        Task<bool> TestEmailAsync(string email, string firstName, string lastName, string username, string temporaryPassword);
         Task<bool> AssignUserToRegionAsync(int userId, int regionId);
         Task<List<UserDto>> GetUsersByRegionAsync(int regionId);
     }

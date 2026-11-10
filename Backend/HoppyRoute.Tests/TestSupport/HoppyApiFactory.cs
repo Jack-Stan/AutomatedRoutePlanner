@@ -49,7 +49,7 @@ namespace HoppyRoute.Tests.TestSupport
             });
         }
 
-        /// <summary>Creates a client and makes sure the admin exists with Id 1 (AuthController.CreateUser hard-codes creator id 1).</summary>
+        /// <summary>Creates a client and makes sure the seeded admin exists.</summary>
         public HttpClient CreateSeededClient()
         {
             var client = CreateClient();
@@ -76,6 +76,37 @@ namespace HoppyRoute.Tests.TestSupport
                 }
             }
             return client;
+        }
+
+        /// <summary>
+        /// Adds an active user with a known (obviously fake) password straight into the test database
+        /// and returns its id. Each call makes a fresh, uniquely named user so tests never share state.
+        /// </summary>
+        public int SeedUser(UserRole role, string username, string password)
+        {
+            using var scope = Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<HoppyDbContext>();
+            var user = new User
+            {
+                Username = username,
+                Email = $"{username}@test.invalid",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(password, 4),
+                Role = role,
+                FirstName = "Test",
+                LastName = role.ToString(),
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.Users.Add(user);
+            db.SaveChanges();
+            return user.Id;
+        }
+
+        public int? CreatedByUserIdOf(string email)
+        {
+            using var scope = Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<HoppyDbContext>();
+            return db.Users.Single(u => u.Email == email).CreatedByUserId;
         }
     }
 

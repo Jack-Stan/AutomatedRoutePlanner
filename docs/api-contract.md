@@ -56,9 +56,9 @@ Screens: Login, ResetPw (ResetPasswordScreen), FirstLogin, Dashboard, Routes, Ro
 
 | api.ts method | HTTP (old) | Screens | Backend (new) | Verdict |
 |---|---|---|---|---|
-| completeRouteStop | POST /routestops/{routeId}/stops/{stopId}/complete | RouteDetails | **POST /routestops/{stopId}/complete**, any role, Manager or own | path-mismatch |
-| updateRouteStopStatus | PUT /routestops/{routeId}/stops/{stopId}/status | RouteDetails ("Probleem melden") | **PUT /routestops/{stopId}/status**, any role, Manager or own | build |
-| updateRouteStopInstructions | PUT /routes/{routeId}/stops/{stopId}/instructions | RouteGen (edit modal) | **PUT /routestops/{stopId}/instructions**, Manager | build |
+| completeRouteStop | POST /routestops/{routeId}/stops/{stopId}/complete | RouteDetails | **POST /routestops/{stopId}/complete**, any role, Manager or own | path-mismatch (frontend: done) |
+| updateRouteStopStatus | PUT /routestops/{routeId}/stops/{stopId}/status | RouteDetails ("Probleem melden") | **PUT /routestops/{stopId}/status**, any role, Manager or own | build (frontend: done) |
+| updateRouteStopInstructions | PUT /routes/{routeId}/stops/{stopId}/instructions | RouteGen (edit modal) | **PUT /routestops/{stopId}/instructions**, Manager | build (frontend: done) |
 
 ### Vehicles
 
@@ -151,15 +151,19 @@ The frontend disagrees in four places (frontend work list, section 5).
 
 ## 5. Frontend work list (AOIFE)
 
-1. `completeRouteStop`: `POST /routestops/${stopId}/complete`. Signature `(stopId)`; RouteDetailsScreen passes `stop.id`. No body. Response is `{ message: string }`, not a `RouteStopDto` (the screen ignores it; type it as `Promise<void>`).
-2. `updateRouteStopStatus`: `PUT /routestops/${stopId}/status`, body `{ status }`, response `RouteStopDto`. RouteDetailsScreen sends Skipped, which must be **4**.
-3. `updateRouteStopInstructions`: `PUT /routestops/${stopId}/instructions`, body `{ notes }`, response `RouteStopDto`. Signature `(stopId, notes)`. In RouteGenerationScreen merge the two modal inputs into one note (max 500 chars), show `stop.notes` instead of `specialInstructions` and `batterySwapNotes`, and drop those two fields from the `RouteStopDto` interface. Add `notes?: string` there. Showing `stop.notes` on RouteDetailsScreen is how the swapper sees it.
-4. Fix the enums to the table in section 3:
+Status: **all six items done** on branch `fix/frontend-contract`. Verified with `npx tsc --noEmit` (no new errors; the 2 existing `react-native-vector-icons` type errors in `DashboardScreen.tsx` remain) and grep. Not yet run on a device, see the last paragraph of this section.
+
+1. **Done.** `completeRouteStop`: `POST /routestops/${stopId}/complete`. Signature `(stopId)`; RouteDetailsScreen passes `stop.id`. No body. Response is `{ message: string }`, not a `RouteStopDto` (the screen ignores it; type it as `Promise<void>`).
+2. **Done.** `updateRouteStopStatus`: `PUT /routestops/${stopId}/status`, body `{ status }`, response `RouteStopDto`. RouteDetailsScreen sends Skipped, which must be **4**.
+3. **Done.** `updateRouteStopInstructions`: `PUT /routestops/${stopId}/instructions`, body `{ notes }`, response `RouteStopDto`. Signature `(stopId, notes)`. In RouteGenerationScreen merge the two modal inputs into one note (max 500 chars), show `stop.notes` instead of `specialInstructions` and `batterySwapNotes`, and drop those two fields from the `RouteStopDto` interface. Add `notes?: string` there. Showing `stop.notes` on RouteDetailsScreen is how the swapper sees it.
+4. **Done.** Fix the enums to the table in section 3 (now one copy each in `Frontend/src/types/index.ts`, imported by the screens; `RouteApprovalStatus` lives there too and nothing in the frontend branches on it yet):
    - `RouteStopStatus` (in `RouteDetailsScreen.tsx` and `types/index.ts`): 1 to 4, **remove `Failed`**. Today `Pending = 0` never matches the backend's 1, so the swapper's action buttons never render.
    - `RouteStatus` in `RouteDetailsScreen.tsx` and `types/index.ts`: 0 to 4 with `Suggested` and `Confirmed` (RoutesScreen is already right).
    - `RouteApprovalStatus` in `RouteGenerationScreen.tsx`: 3 is `RequiresChanges`, not `AutoApproved`.
-5. Delete the 25 dead methods from `api.ts`: suggestRoute, getTodaysRoute, getRoutes, createRoute, updateRoute, deleteRoute, optimizeRoute, approveRoute, rejectRoute, getRoutesPendingApproval, getLowBatteryVehicles, getVehicleStats, getVehicle, getVehicles, createVehicle, updateVehicle, deleteVehicle, getZonesByCountry, getZone, getZonesByRegion, createZone, updateZone, deleteZone, healthCheck, getCurrentUser. Then the Redux slices that call them (`routesSlice`, `vehiclesSlice`, `zonesSlice`) have no callers left; remove the store, `store/hooks.ts` and the `Provider` in `App.tsx` as well, or at least the thunks, since nothing dispatches or selects.
-6. `RouteDto` interface: the backend field is `assignedSwapperId`, not `swapperId` (no screen reads it; `swapperName` still works through a compatibility property).
+5. **Done.** Delete the 25 dead methods from `api.ts`: suggestRoute, getTodaysRoute, getRoutes, createRoute, updateRoute, deleteRoute, optimizeRoute, approveRoute, rejectRoute, getRoutesPendingApproval, getLowBatteryVehicles, getVehicleStats, getVehicle, getVehicles, createVehicle, updateVehicle, deleteVehicle, getZonesByCountry, getZone, getZonesByRegion, createZone, updateZone, deleteZone, healthCheck, getCurrentUser. Then the Redux slices that call them (`routesSlice`, `vehiclesSlice`, `zonesSlice`) have no callers left; the store, `store/hooks.ts`, the `Provider` in `App.tsx` and the `@reduxjs/toolkit` and `react-redux` dependencies are removed as well (nothing dispatched or selected).
+6. **Done.** `RouteDto` interface: the backend field is `assignedSwapperId`, not `swapperId` (no screen reads it; `swapperName` still works through a compatibility property).
+
+Still needs a real device or emulator (no Expo here): the swapper's "Swap Voltooid" and "Probleem Melden" buttons now rendering on Pending (1) stops, complete and skip round trips, the merged notes modal (500 character limit, counter) and `notes` showing on RouteDetails and in the RouteGen preview, and a fresh `npm install` without the Redux packages.
 
 ## 6. Not done, listed for Stan
 

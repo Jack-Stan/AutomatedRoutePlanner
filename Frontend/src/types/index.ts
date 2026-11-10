@@ -1,7 +1,7 @@
 // Types gebaseerd op de backend DTOs
 export interface Route {
   id: number;
-  swapperId: number;
+  assignedSwapperId: number;
   swapperName: string;
   zoneId: number;
   zoneName: string;
@@ -24,6 +24,7 @@ export interface RouteStop {
   status: RouteStopStatus;
   actualArrivalTime?: string;
   actualDepartureTime?: string;
+  notes?: string;
 }
 
 export interface Vehicle {
@@ -61,18 +62,28 @@ export interface RouteGenerationRequest {
   routeType?: string;
 }
 
+// Enums are serialised as numbers by the backend. Single source of truth for
+// the screens, values per docs/api-contract.md section 3.
 export enum RouteStatus {
-  Pending = 0,
-  InProgress = 1,
-  Completed = 2,
-  Cancelled = 3
+  Suggested = 0,
+  Confirmed = 1,
+  InProgress = 2,
+  Completed = 3,
+  Cancelled = 4
 }
 
 export enum RouteStopStatus {
-  Pending = 0,
-  InProgress = 1,
-  Completed = 2,
-  Skipped = 3
+  Pending = 1,
+  InProgress = 2,
+  Completed = 3,
+  Skipped = 4
+}
+
+export enum RouteApprovalStatus {
+  PendingApproval = 0,
+  Approved = 1,
+  Rejected = 2,
+  RequiresChanges = 3
 }
 
 // API Response types

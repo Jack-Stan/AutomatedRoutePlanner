@@ -15,7 +15,6 @@ Een cross-platform applicatie gebouwd met React Native en Expo voor het beheren 
 
 - **React Native** met Expo
 - **TypeScript** voor type safety
-- **Redux Toolkit** voor state management
 - **React Navigation** voor navigatie
 - **Axios** voor API communicatie
 - **React Native Maps** voor kaart functionaliteiten
@@ -75,13 +74,6 @@ src/
 │   └── SettingsScreen.tsx
 ├── services/           # API services
 │   └── api.ts
-├── store/              # Redux store
-│   ├── index.ts
-│   ├── hooks.ts
-│   └── slices/
-│       ├── routesSlice.ts
-│       ├── vehiclesSlice.ts
-│       └── zonesSlice.ts
 └── types/              # TypeScript types
     └── index.ts
 ```
@@ -103,17 +95,11 @@ De app verwacht dat de .NET Core API draait op:
 ```typescript
 import { apiService } from '../services/api';
 
-// Gebruik in components of async thunks
-const routes = await apiService.getRoutes();
+// Gebruik in components; de beschikbare calls staan in docs/api-contract.md
+const routes = await apiService.getAllRoutes();
 ```
 
-### Redux state gebruiken
-```typescript
-import { useAppSelector, useAppDispatch } from '../store/hooks';
-
-const routes = useAppSelector(state => state.routes.routes);
-const dispatch = useAppDispatch();
-```
+State leeft in de screens zelf en in `AuthContext` en `LanguageContext`; er is geen Redux store.
 
 ## Building voor productie
 
@@ -177,7 +163,6 @@ Deze frontend werkt samen met de .NET Core API. Zorg ervoor dat de backend draai
 Voor vragen of problemen, check:
 - Expo documentatie: https://docs.expo.dev
 - React Native documentatie: https://reactnative.dev
-- Redux Toolkit: https://redux-toolkit.js.org
 
 
 Inloggegevens:

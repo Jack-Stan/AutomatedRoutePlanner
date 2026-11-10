@@ -15,29 +15,12 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { HoppyColors, HoppyTheme } from '../theme';
 import { apiService, RouteDto, RouteStopDto } from '../services/api';
-import { RootStackParamList } from '../types';
+import { RootStackParamList, RouteStopStatus } from '../types';
 import { HoppyButton, HoppyCard } from '../components';
 import { useAuth } from '../contexts/AuthContext';
 import { logApiError } from '../utils/devLog';
 
 type RouteDetailsScreenNavigationProp = StackNavigationProp<RootStackParamList>;
-
-// Route Stop Status enum (matching backend)
-enum RouteStopStatus {
-  Pending = 0,
-  InProgress = 1,
-  Completed = 2,
-  Skipped = 3,
-  Failed = 4
-}
-
-// Route Status enum (matching backend)
-enum RouteStatus {
-  Pending = 0,
-  InProgress = 1,
-  Completed = 2,
-  Cancelled = 3
-}
 
 export default function RouteDetailsScreen() {
   const route = useRoute();
@@ -82,8 +65,6 @@ export default function RouteDetailsScreen() {
         return HoppyColors.success;
       case RouteStopStatus.Skipped:
         return HoppyColors.info;
-      case RouteStopStatus.Failed:
-        return HoppyColors.error;
       default:
         return HoppyColors.gray400;
     }
@@ -99,8 +80,6 @@ export default function RouteDetailsScreen() {
         return 'Voltooid';
       case RouteStopStatus.Skipped:
         return 'Overgeslagen';
-      case RouteStopStatus.Failed:
-        return 'Mislukt';
       default:
         return 'Onbekend';
     }
@@ -108,7 +87,7 @@ export default function RouteDetailsScreen() {
 
   const handleCompleteStop = async (stopId: number) => {
     try {
-      await apiService.completeRouteStop(routeId, stopId);
+      await apiService.completeRouteStop(stopId);
       Alert.alert('Succes', 'Stop gemarkeerd als voltooid!');
       fetchRouteDetails(); // Refresh data
     } catch (err: any) {
@@ -125,7 +104,7 @@ export default function RouteDetailsScreen() {
     if (!selectedStopId) return;
     
     try {
-      await apiService.updateRouteStopStatus(routeId, selectedStopId, RouteStopStatus.Skipped);
+      await apiService.updateRouteStopStatus(selectedStopId, RouteStopStatus.Skipped);
       // In a real app, you'd also save the comment
       Alert.alert('Succes', 'Stop overgeslagen met opmerking');
       setShowCommentModal(false);
@@ -173,6 +152,12 @@ export default function RouteDetailsScreen() {
           <Ionicons name="map-outline" size={16} color={HoppyColors.gray600} />
           <Text style={styles.detailText}>Zone: {stop.vehicle.zoneName}</Text>
         </View>
+        {!!stop.notes && (
+          <View style={styles.detailRow}>
+            <Ionicons name="document-text-outline" size={16} color={HoppyColors.gray600} />
+            <Text style={styles.detailText}>Opmerking: {stop.notes}</Text>
+          </View>
+        )}
       </View>
 
       {/* Action buttons for swappers */}

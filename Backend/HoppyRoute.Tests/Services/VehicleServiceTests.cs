@@ -1,269 +1,187 @@
-using Microsoft.EntityFrameworkCore;
 using FluentAssertions;
 using HoppyRoute.Application.Services;
 using HoppyRoute.Domain.Entities;
 using HoppyRoute.Infrastructure.Data;
-using Xunit;
+using HoppyRoute.Tests.TestSupport;
 
 namespace HoppyRoute.Tests.Services
 {
     public class VehicleServiceTests : IDisposable
     {
-        private readonly HoppyDbContext _context;
-        private readonly VehicleService _vehicleService;
+        private readonly HoppyDbContext _db = TestDb.Create();
+        private readonly VehicleService _service;
+        private readonly Zone _zoneA;
+        private readonly Zone _zoneB;
+        private int _seq;
 
         public VehicleServiceTests()
         {
-            var options = new DbContextOptionsBuilder<HoppyDbContext>()
-                .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
-                .Options;
-
-            _context = new HoppyDbContext(options);
-            _vehicleService = new VehicleService(_context);
+            _service = new VehicleService(_db);
+            var region = new Region { Name = "Mechelen", Country = "België", CountryCode = "BE" };
+            _db.Regions.Add(region);
+            _db.SaveChanges();
+            _zoneA = new Zone { Name = "Mechelen Centrum", CountryCode = "BE", RegionId = region.Id, GeoJsonBoundary = "{}" };
+            _zoneB = new Zone { Name = "Mechelen Station", CountryCode = "BE", RegionId = region.Id, GeoJsonBoundary = "{}" };
+            _db.Zones.AddRange(_zoneA, _zoneB);
+            _db.SaveChanges();
         }
 
-        [Fact]
-        public async Task GetLowBatteryVehiclesAsync_ReturnsOnlyLowBatteryVehicles()
+        public void Dispose() => _db.Dispose();
+
+        private Vehicle Add(int battery, int? zoneId, bool available = true, bool needsReplacement = false)
         {
-            // Arrange
-            var zone = new Zone
+            var v = new Vehicle
             {
-                Name = "Test Zone",
-                CountryCode = "BE",
-                GeoJsonBoundary = "{}"
-            };
-            _context.Zones.Add(zone);
-            await _context.SaveChangesAsync();
-
-            var vehicles = new[]
-            {
-                new Vehicle
-                {
-                    ExternalId = "VH001",
-                    ZoneId = zone.Id,
-                    BatteryLevel = 10, // Low battery
-                    Latitude = 51.0,
-                    Longitude = 4.0,
-                    LastUpdated = DateTime.UtcNow
-                },
-                new Vehicle
-                {
-                    ExternalId = "VH002",
-                    ZoneId = zone.Id,
-                    BatteryLevel = 80, // High battery
-                    Latitude = 51.0,
-                    Longitude = 4.0,
-                    LastUpdated = DateTime.UtcNow
-                },
-                new Vehicle
-                {
-                    ExternalId = "VH003",
-                    ZoneId = zone.Id,
-                    BatteryLevel = 20, // Low battery
-                    Latitude = 51.0,
-                    Longitude = 4.0,
-                    LastUpdated = DateTime.UtcNow
-                }
-            };
-
-            _context.Vehicles.AddRange(vehicles);
-            await _context.SaveChangesAsync();
-
-            // Act
-            var result = await _vehicleService.GetLowBatteryVehiclesAsync(zone.Id, 25);
-
-            // Assert
-            result.Should().HaveCount(2);
-            result.Should().OnlyContain(v => v.BatteryLevel <= 25);
-            result.Should().BeInAscendingOrder(v => v.BatteryLevel);
-        }
-
-        [Fact]
-        public async Task GetVehiclesByZoneAsync_ReturnsOnlyVehiclesInZone()
-        {
-            // Arrange
-            var zone1 = new Zone
-            {
-                Name = "Zone 1",
-                CountryCode = "BE",
-                GeoJsonBoundary = "{}"
-            };
-            var zone2 = new Zone
-            {
-                Name = "Zone 2",
-                CountryCode = "BE",
-                GeoJsonBoundary = "{}"
-            };
-            _context.Zones.AddRange(zone1, zone2);
-            await _context.SaveChangesAsync();
-
-            var vehicles = new[]
-            {
-                new Vehicle
-                {
-                    ExternalId = "VH001",
-                    ZoneId = zone1.Id,
-                    BatteryLevel = 50,
-                    Latitude = 51.0,
-                    Longitude = 4.0,
-                    LastUpdated = DateTime.UtcNow
-                },
-                new Vehicle
-                {
-                    ExternalId = "VH002",
-                    ZoneId = zone2.Id,
-                    BatteryLevel = 60,
-                    Latitude = 51.0,
-                    Longitude = 4.0,
-                    LastUpdated = DateTime.UtcNow
-                },
-                new Vehicle
-                {
-                    ExternalId = "VH003",
-                    ZoneId = zone1.Id,
-                    BatteryLevel = 70,
-                    Latitude = 51.0,
-                    Longitude = 4.0,
-                    LastUpdated = DateTime.UtcNow
-                }
-            };
-
-            _context.Vehicles.AddRange(vehicles);
-            await _context.SaveChangesAsync();
-
-            // Act
-            var result = await _vehicleService.GetVehiclesByZoneAsync(zone1.Id);
-
-            // Assert
-            result.Should().HaveCount(2);
-            result.Should().OnlyContain(v => v.ZoneId == zone1.Id);
-            result.Should().BeInAscendingOrder(v => v.ExternalId);
-        }
-
-        [Fact]
-        public async Task GetVehiclesByZoneAsync_IncludesOutOfZoneVehicles()
-        {
-            // Arrange
-            var zone = new Zone
-            {
-                Name = "Test Zone",
-                CountryCode = "BE",
-                GeoJsonBoundary = "{}"
-            };
-            _context.Zones.Add(zone);
-            await _context.SaveChangesAsync();
-
-            var vehicles = new[]
-            {
-                new Vehicle
-                {
-                    ExternalId = "VH001",
-                    ZoneId = zone.Id,
-                    BatteryLevel = 50,
-                    Latitude = 51.0,
-                    Longitude = 4.0,
-                    LastUpdated = DateTime.UtcNow
-                },
-                new Vehicle
-                {
-                    ExternalId = "VH002",
-                    ZoneId = null, // Out of zone
-                    BatteryLevel = 20,
-                    Latitude = 51.0,
-                    Longitude = 4.0,
-                    LastUpdated = DateTime.UtcNow
-                }
-            };
-
-            _context.Vehicles.AddRange(vehicles);
-            await _context.SaveChangesAsync();
-
-            // Act - This should only return vehicles IN the zone
-            var result = await _vehicleService.GetVehiclesByZoneAsync(zone.Id);
-
-            // Assert
-            result.Should().HaveCount(1);
-            result.Should().OnlyContain(v => v.ZoneId == zone.Id);
-        }
-
-        [Fact]
-        public async Task GetVehicleByIdAsync_ExistingVehicle_ReturnsVehicle()
-        {
-            // Arrange
-            var zone = new Zone
-            {
-                Name = "Test Zone",
-                CountryCode = "BE",
-                GeoJsonBoundary = "{}"
-            };
-            _context.Zones.Add(zone);
-            await _context.SaveChangesAsync();
-
-            var vehicle = new Vehicle
-            {
-                ExternalId = "VH001",
-                ZoneId = zone.Id,
-                BatteryLevel = 50,
-                Latitude = 51.0,
-                Longitude = 4.0,
+                ExternalId = $"HOP-{++_seq:D4}",
+                RegistrationNumber = $"R{_seq:D4}",
+                VehicleType = "E-Scooter",
+                BatteryLevel = battery,
+                ZoneId = zoneId,
+                IsAvailable = available,
+                NeedsBatteryReplacement = needsReplacement,
+                Latitude = 51.0275,
+                Longitude = 4.4775,
                 LastUpdated = DateTime.UtcNow
             };
+            _db.Vehicles.Add(v);
+            _db.SaveChanges();
+            return v;
+        }
 
-            _context.Vehicles.Add(vehicle);
-            await _context.SaveChangesAsync();
+        // ---------- low-battery detection ----------
 
-            // Act
-            var result = await _vehicleService.GetVehicleByIdAsync(vehicle.Id);
+        [Fact]
+        public async Task GetLowBattery_DefaultThreshold25_IsInclusive_AndSortedLowestFirst()
+        {
+            var at25 = Add(25, _zoneA.Id);
+            Add(26, _zoneA.Id);
+            var at5 = Add(5, _zoneA.Id);
+            var at0 = Add(0, _zoneA.Id);
 
-            // Assert
-            result.Should().NotBeNull();
-            result!.Id.Should().Be(vehicle.Id);
-            result.ExternalId.Should().Be("VH001");
-            result.ZoneId.Should().Be(zone.Id);
-            result.ZoneName.Should().Be("Test Zone");
+            var result = await _service.GetLowBatteryVehiclesAsync(_zoneA.Id);
+
+            result.Select(v => v.Id).Should().Equal(at0.Id, at5.Id, at25.Id);
+            result.Should().OnlyContain(v => v.ZoneName == "Mechelen Centrum");
         }
 
         [Fact]
-        public async Task GetVehicleByIdAsync_NonExistingVehicle_ReturnsNull()
+        public async Task GetLowBattery_CustomThreshold_IsRespected()
         {
-            // Act
-            var result = await _vehicleService.GetVehicleByIdAsync(999);
+            Add(15, _zoneA.Id);
+            var at10 = Add(10, _zoneA.Id);
 
-            // Assert
-            result.Should().BeNull();
+            var result = await _service.GetLowBatteryVehiclesAsync(_zoneA.Id, batteryThreshold: 10);
+
+            result.Select(v => v.Id).Should().Equal(at10.Id);
         }
 
         [Fact]
-        public async Task GetVehicleByIdAsync_VehicleWithoutZone_ReturnsVehicleWithNullZone()
+        public async Task GetLowBattery_ExcludesUnavailableVehicles_AndOtherZones()
         {
-            // Arrange
-            var vehicle = new Vehicle
-            {
-                ExternalId = "VH001",
-                ZoneId = null, // Out of zone
-                BatteryLevel = 50,
-                Latitude = 51.0,
-                Longitude = 4.0,
-                LastUpdated = DateTime.UtcNow
-            };
+            Add(5, _zoneA.Id, available: false);
+            Add(5, _zoneB.Id);
+            Add(5, zoneId: null);
+            var mine = Add(5, _zoneA.Id);
 
-            _context.Vehicles.Add(vehicle);
-            await _context.SaveChangesAsync();
+            var result = await _service.GetLowBatteryVehiclesAsync(_zoneA.Id);
 
-            // Act
-            var result = await _vehicleService.GetVehicleByIdAsync(vehicle.Id);
-
-            // Assert
-            result.Should().NotBeNull();
-            result!.Id.Should().Be(vehicle.Id);
-            result.ExternalId.Should().Be("VH001");
-            result.ZoneId.Should().BeNull();
-            result.ZoneName.Should().BeNull();
+            result.Select(v => v.Id).Should().Equal(mine.Id);
         }
 
-        public void Dispose()
+        [Fact]
+        public async Task GetAllLowBattery_SpansZones_AndIncludesVehiclesWithNoZone()
         {
-            _context.Dispose();
+            var a = Add(10, _zoneA.Id);
+            var b = Add(10, _zoneB.Id);
+            var outOfZone = Add(3, zoneId: null);
+            Add(80, _zoneA.Id);
+            Add(10, _zoneB.Id, available: false);
+
+            var result = await _service.GetAllLowBatteryVehiclesAsync();
+
+            result.Select(v => v.Id).Should().BeEquivalentTo(new[] { outOfZone.Id, a.Id, b.Id });
+            result.First().Id.Should().Be(outOfZone.Id, "lowest battery first");
+            result.Single(v => v.Id == outOfZone.Id).ZoneName.Should().BeNull();
+        }
+
+        [Theory]
+        [InlineData(25, true)]
+        [InlineData(26, false)]
+        [InlineData(0, true)]
+        [InlineData(100, false)]
+        public async Task UpdateBattery_SetsNeedsReplacementAtOrBelow25(int level, bool expected)
+        {
+            var v = Add(50, _zoneA.Id);
+
+            var dto = await _service.UpdateVehicleBatteryAsync(v.Id, level);
+
+            dto!.BatteryLevel.Should().Be(level);
+            dto.NeedsBatteryReplacement.Should().Be(expected);
+            (await _db.Vehicles.FindAsync(v.Id))!.NeedsBatteryReplacement.Should().Be(expected);
+        }
+
+        [Fact]
+        public async Task UpdateBattery_UnknownVehicle_ReturnsNull()
+        {
+            (await _service.UpdateVehicleBatteryAsync(9999, 10)).Should().BeNull();
+        }
+
+        [Fact]
+        public async Task NeedingReplacement_UsesTheFlag_NotTheRawLevel()
+        {
+            var flagged = Add(30, _zoneA.Id, needsReplacement: true);
+            Add(5, _zoneA.Id, needsReplacement: false);
+            Add(30, _zoneA.Id, available: false, needsReplacement: true);
+
+            var result = await _service.GetVehiclesNeedingBatteryReplacementAsync(_zoneA.Id);
+
+            result.Select(v => v.Id).Should().Equal(flagged.Id);
+        }
+
+        // ---------- zone membership (ZoneId == null is what the seed data calls "out of zone") ----------
+
+        [Fact]
+        public async Task GetVehiclesByZone_ExcludesVehiclesWithNoZone_AndOtherZones()
+        {
+            var inA = Add(50, _zoneA.Id);
+            Add(50, _zoneB.Id);
+            Add(50, zoneId: null);
+
+            var result = await _service.GetVehiclesByZoneAsync(_zoneA.Id);
+
+            result.Select(v => v.Id).Should().Equal(inA.Id);
+        }
+
+        [Fact]
+        public async Task GetVehicleById_NoZone_ReturnsVehicleWithNullZone()
+        {
+            var v = Add(40, zoneId: null);
+
+            var dto = await _service.GetVehicleByIdAsync(v.Id);
+
+            dto!.ZoneId.Should().BeNull();
+            dto.ZoneName.Should().BeNull();
+            (await _service.GetVehicleByIdAsync(9999)).Should().BeNull();
+        }
+
+        // ---------- parking-zone bookkeeping ----------
+
+        [Fact]
+        public async Task MoveToParkingZone_UpdatesBothCounters()
+        {
+            var from = new ParkingZone { Name = "P1", ZoneId = _zoneA.Id, CurrentVehicleCount = 2 };
+            var to = new ParkingZone { Name = "P2", ZoneId = _zoneA.Id, CurrentVehicleCount = 0 };
+            _db.ParkingZones.AddRange(from, to);
+            await _db.SaveChangesAsync();
+            var v = Add(50, _zoneA.Id);
+            v.CurrentParkingZoneId = from.Id;
+            await _db.SaveChangesAsync();
+
+            (await _service.MoveVehicleToParkingZoneAsync(v.Id, to.Id)).Should().BeTrue();
+
+            (await _db.ParkingZones.FindAsync(from.Id))!.CurrentVehicleCount.Should().Be(1);
+            (await _db.ParkingZones.FindAsync(to.Id))!.CurrentVehicleCount.Should().Be(1);
+            (await _db.Vehicles.FindAsync(v.Id))!.CurrentParkingZoneId.Should().Be(to.Id);
         }
     }
 }

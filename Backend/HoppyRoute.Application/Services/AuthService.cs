@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -475,32 +475,35 @@ namespace HoppyRoute.Application.Services
             return normalized;
         }
 
-        private string GenerateTemporaryPassword()
+        internal static string GenerateTemporaryPassword()
         {
-            // Generate a secure random password
-            const string chars = "ABCDEFGHJKLMNOPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789!@#$%^&*";
-            var random = new Random();
+            // Character classes are kept separate so the "one of each" guarantee holds.
+            // (Previously one combined string was indexed with fixed ranges 0-26/26-52/52-62,
+            // but the string omits 'I' and 'l', so those ranges straddled class boundaries.)
+            const string upper = "ABCDEFGHJKLMNOPQRSTUVWXYZ";
+            const string lower = "abcdefghijkmnopqrstuvwxyz";
+            const string digits = "0123456789";
+            const string special = "!@#$%^&*";
+            const string all = upper + lower + digits + special;
+
             var password = new char[12];
-            
-            // Ensure at least one uppercase, one lowercase, one digit, and one special character
-            password[0] = chars[random.Next(0, 26)]; // uppercase
-            password[1] = chars[random.Next(26, 52)]; // lowercase
-            password[2] = chars[random.Next(52, 62)]; // digit
-            password[3] = chars[random.Next(62, chars.Length)]; // special character
-            
-            // Fill the rest randomly
+            password[0] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
+            password[1] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
+            password[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
+            password[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
+
             for (int i = 4; i < password.Length; i++)
             {
-                password[i] = chars[random.Next(chars.Length)];
+                password[i] = all[RandomNumberGenerator.GetInt32(all.Length)];
             }
-            
-            // Shuffle the password
+
+            // Shuffle (Fisher-Yates) so the guaranteed characters are not always in front.
             for (int i = password.Length - 1; i > 0; i--)
             {
-                int j = random.Next(i + 1);
+                int j = RandomNumberGenerator.GetInt32(i + 1);
                 (password[i], password[j]) = (password[j], password[i]);
             }
-            
+
             return new string(password);
         }
 

@@ -129,7 +129,7 @@ namespace HoppyRoute.Tests.Controllers
             var (routeId, _, _) = SeedRoute(swapperId); // even their own route
 
             var response = await SendAsync(method, string.Format(urlFormat, routeId), token,
-                urlFormat.Contains("approve") || urlFormat.Contains("reject") ? new RouteApprovalRequest { ApprovedBy = swapperId } : null);
+                urlFormat.Contains("approve") || urlFormat.Contains("reject") ? new RouteApprovalRequest { Notes = "test-only" } : null);
 
             response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
             Read(db => db.Routes.AsNoTracking().Single(r => r.Id == routeId).ApprovalStatus)
@@ -145,10 +145,37 @@ namespace HoppyRoute.Tests.Controllers
             var (swapperId, _) = await UserAsync(UserRole.BatterySwapper);
             var (routeId, _, _) = SeedRoute(swapperId);
 
-            var response = await SendAsync("POST", $"/api/routes/{routeId}/approve", token, new RouteApprovalRequest { ApprovedBy = managerId });
+            // A client-supplied approvedBy (here: the swapper) must be ignored; the token user is recorded.
+            var response = await SendAsync("POST", $"/api/routes/{routeId}/approve", token, new { approvedBy = swapperId, notes = "test-only" });
 
             response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
-            Read(db => db.Routes.AsNoTracking().Single(r => r.Id == routeId).ApprovalStatus).Should().Be(RouteApprovalStatus.Approved);
+            var route = Read(db => db.Routes.AsNoTracking().Single(r => r.Id == routeId));
+            route.ApprovalStatus.Should().Be(RouteApprovalStatus.Approved);
+            route.ApprovedBy.Should().Be(managerId);
+            route.ManagerNotes.Should().Be("test-only");
+        }
+
+        [Fact]
+        public async Task ApproveRoute_WithoutBody_Approves_AndRecordsTheCaller()
+        {
+            var (managerId, token) = await UserAsync(UserRole.FleetManager);
+            var (swapperId, _) = await UserAsync(UserRole.BatterySwapper);
+            var (routeId, _, _) = SeedRoute(swapperId);
+
+            var request = new HttpRequestMessage(HttpMethod.Post, $"/api/routes/{routeId}/approve"); // no content at all
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await _client.SendAsync(request);
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            Read(db => db.Routes.AsNoTracking().Single(r => r.Id == routeId).ApprovedBy).Should().Be(managerId);
+        }
+
+        [Fact]
+        public async Task ApproveAndReject_UnknownRoute_Return404()
+        {
+            var (_, token) = await UserAsync(UserRole.Admin);
+            (await SendAsync("POST", "/api/routes/987654/approve", token, new { notes = "x" })).StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await SendAsync("POST", "/api/routes/987654/reject", token, new { notes = "x" })).StatusCode.Should().Be(HttpStatusCode.NotFound);
         }
 
         [Fact]
@@ -158,10 +185,12 @@ namespace HoppyRoute.Tests.Controllers
             var (swapperId, _) = await UserAsync(UserRole.BatterySwapper);
             var (routeId, _, _) = SeedRoute(swapperId);
 
-            var response = await SendAsync("POST", $"/api/routes/{routeId}/reject", token, new RouteApprovalRequest { ApprovedBy = managerId });
+            var response = await SendAsync("POST", $"/api/routes/{routeId}/reject", token, new { approvedBy = swapperId, notes = "test-only" });
 
             response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
-            Read(db => db.Routes.AsNoTracking().Single(r => r.Id == routeId).ApprovalStatus).Should().Be(RouteApprovalStatus.Rejected);
+            var route = Read(db => db.Routes.AsNoTracking().Single(r => r.Id == routeId));
+            route.ApprovalStatus.Should().Be(RouteApprovalStatus.Rejected);
+            route.ApprovedBy.Should().Be(managerId);
         }
 
         [Theory]

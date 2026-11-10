@@ -169,29 +169,21 @@ class ApiService {
   }
 
   private setupInterceptors() {
+    // Logging rule: at most method + URL + status, and only in __DEV__.
+    // Never log request config, headers (Authorization), bodies (passwords) or response data.
+
     // Request interceptor
     this.api.interceptors.request.use(
       async (config) => {
-        console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
         // Add authorization header if token exists
         try {
           const token = await AsyncStorage.getItem('authToken');
-          console.log('Auth token found:', token ? 'YES' : 'NO');
           if (token) {
             config.headers.Authorization = `Bearer ${token}`;
-            console.log('Authorization header set with token');
-          } else {
-            console.log('No auth token found in storage');
           }
-        } catch (error) {
-          console.error('Error getting auth token:', error);
+        } catch {
+          if (__DEV__) console.warn('Could not read auth token from storage');
         }
-        console.log('Final request config:', {
-          url: config.url,
-          method: config.method,
-          headers: config.headers,
-          data: config.data
-        });
         return config;
       },
       (error) => Promise.reject(error)
@@ -200,40 +192,27 @@ class ApiService {
     // Response interceptor
     this.api.interceptors.response.use(
       (response) => {
-        console.log(`API Response: ${response.status} ${response.config.url}`);
+        if (__DEV__) {
+          console.log(`API ${response.config.method?.toUpperCase()} ${response.config.url} -> ${response.status}`);
+        }
         return response;
       },
       async (error) => {
-        console.error('API Error:', {
-          url: error.config?.url,
-          status: error.response?.status,
-          data: error.response?.data,
-          message: error.message
-        });
+        if (__DEV__) {
+          console.log(`API ${error.config?.method?.toUpperCase()} ${error.config?.url} -> ${error.response?.status ?? 'no response'}`);
+        }
 
-        // Handle 401 Unauthorized errors - token might be expired or invalid
-        if (error.response?.status === 401) {
-          console.log('401 Unauthorized - removing stored auth data');
+        // 401: token expired or invalid. 403: might be an old token format.
+        // Either way drop the stored session so the user logs in again.
+        if (error.response?.status === 401 || error.response?.status === 403) {
           try {
             await AsyncStorage.removeItem('authToken');
             await AsyncStorage.removeItem('userData');
-          } catch (storageError) {
-            console.error('Error clearing auth storage:', storageError);
+          } catch {
+            if (__DEV__) console.warn('Could not clear auth storage');
           }
         }
 
-        // Handle 403 Forbidden errors - might be old token format
-        if (error.response?.status === 403) {
-          console.log('403 Forbidden - clearing auth data to force re-login with new token format');
-          try {
-            await AsyncStorage.removeItem('authToken');
-            await AsyncStorage.removeItem('userData');
-            // Note: The user will need to re-login to get a new token with the correct format
-          } catch (storageError) {
-            console.error('Error clearing auth storage on 403:', storageError);
-          }
-        }
-        
         return Promise.reject(error);
       }
     );
@@ -455,14 +434,12 @@ class ApiService {
 
   // Authentication endpoints
   async login(loginData: LoginRequest): Promise<LoginResponse> {
-    console.log('API Request: POST /auth/login');
-    console.log('Login data being sent:', loginData);
     const response: AxiosResponse<LoginResponse> = await this.api.post('/auth/login', loginData);
     return response.data;
   }
 
   async getCurrentUser(): Promise<UserDto> {
-    const response: AxiosResponse<UserDto> = await this.api.get('/auth/me');
+    const response: AxiosResponse<UserDto> = await this.api.get('/auth/users/me');
     return response.data;
   }
 
@@ -474,18 +451,8 @@ class ApiService {
   }
 
   async createUser(userData: CreateUserRequest): Promise<UserDto> {
-    console.log('createUser - sending request to backend:', userData);
-    try {
-      const response: AxiosResponse<UserDto> = await this.api.post('/auth/users', userData);
-      console.log('createUser - success response:', response.data);
-      return response.data;
-    } catch (error: any) {
-      console.error('createUser - error:', error);
-      console.error('createUser - error response:', error.response);
-      console.error('createUser - error status:', error.response?.status);
-      console.error('createUser - error data:', error.response?.data);
-      throw error;
-    }
+    const response: AxiosResponse<UserDto> = await this.api.post('/auth/users', userData);
+    return response.data;
   }
 
   async getUsers(): Promise<UserDto[]> {

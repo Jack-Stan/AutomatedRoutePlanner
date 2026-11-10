@@ -4,6 +4,7 @@ using HoppyRoute.Application.DTOs;
 using HoppyRoute.Application.Interfaces;
 using HoppyRoute.Domain.Enums;
 using System.Security.Claims;
+using HoppyRoute.Application.Exceptions;
 
 namespace HoppyRouteApi.Controllers
 {
@@ -14,11 +15,22 @@ namespace HoppyRouteApi.Controllers
         // Role names match the "role" claim AuthService puts in the JWT (UserRole.ToString()).
         private const string AdminRole = nameof(UserRole.Admin);
 
-        private readonly IAuthService _authService;
+        // Clients get this generic text on any unexpected error; the details only go to the server log.
+        private const string GenericErrorMessage = "Er is een fout opgetreden";
 
-        public AuthController(IAuthService authService)
+        private readonly IAuthService _authService;
+        private readonly ILogger<AuthController> _logger;
+
+        public AuthController(IAuthService authService, ILogger<AuthController> logger)
         {
             _authService = authService;
+            _logger = logger;
+        }
+
+        private ObjectResult ServerError(Exception ex, [System.Runtime.CompilerServices.CallerMemberName] string action = "")
+        {
+            _logger.LogError(ex, "Onverwachte fout in AuthController.{Action}", action);
+            return StatusCode(500, new { message = GenericErrorMessage });
         }
 
         [HttpPost("login")]
@@ -35,7 +47,7 @@ namespace HoppyRouteApi.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return ServerError(ex);
             }
         }
 
@@ -50,6 +62,10 @@ namespace HoppyRouteApi.Controllers
                 var result = await _authService.CreateUserAsync(request, currentUserId);
                 return Ok(result);
             }
+            catch (ForbiddenOperationException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            }
             catch (UnauthorizedAccessException ex)
             {
                 return Unauthorized(new { message = ex.Message });
@@ -60,7 +76,7 @@ namespace HoppyRouteApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Er is een fout opgetreden", error = ex.Message });
+                return ServerError(ex);
             }
         }
 
@@ -74,9 +90,17 @@ namespace HoppyRouteApi.Controllers
                 var user = await _authService.GetUserByIdAsync(userId);
                 return Ok(user);
             }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return ServerError(ex);
             }
         }
 
@@ -106,9 +130,9 @@ namespace HoppyRouteApi.Controllers
             {
                 return NotFound(new { message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Er is een fout opgetreden" });
+                return ServerError(ex);
             }
         }
 
@@ -152,7 +176,7 @@ namespace HoppyRouteApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Er is een fout opgetreden", error = ex.Message });
+                return ServerError(ex);
             }
         }
 
@@ -169,9 +193,9 @@ namespace HoppyRouteApi.Controllers
             {
                 return NotFound(new { message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Er is een fout opgetreden" });
+                return ServerError(ex);
             }
         }
 
@@ -208,13 +232,18 @@ namespace HoppyRouteApi.Controllers
                 
                 return BadRequest(new { message = "Wachtwoord wijzigen mislukt" });
             }
+            catch (InvalidCurrentPasswordException ex)
+            {
+                // 400, not 401: the token is fine, the form input is wrong. A 401 makes the app log the user out.
+                return BadRequest(new { message = ex.Message });
+            }
             catch (UnauthorizedAccessException ex)
             {
                 return Unauthorized(new { message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Er is een fout opgetreden" });
+                return ServerError(ex);
             }
         }
 
@@ -239,7 +268,7 @@ namespace HoppyRouteApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Er is een fout opgetreden", error = ex.Message });
+                return ServerError(ex);
             }
         }
 
@@ -264,7 +293,7 @@ namespace HoppyRouteApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Er is een fout opgetreden", error = ex.Message });
+                return ServerError(ex);
             }
         }
 
@@ -293,7 +322,7 @@ namespace HoppyRouteApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Er is een fout opgetreden", error = ex.Message });
+                return ServerError(ex);
             }
         }
 
@@ -321,7 +350,7 @@ namespace HoppyRouteApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Er is een fout opgetreden", error = ex.Message });
+                return ServerError(ex);
             }
         }
 
@@ -345,7 +374,7 @@ namespace HoppyRouteApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Er is een fout opgetreden", error = ex.Message });
+                return ServerError(ex);
             }
         }
 
@@ -371,7 +400,7 @@ namespace HoppyRouteApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Er is een fout opgetreden", error = ex.Message });
+                return ServerError(ex);
             }
         }
 

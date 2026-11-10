@@ -73,7 +73,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       setUser(userData);
     } catch (error: any) {
-      console.error('Login error:', error);
+      // Never log the axios error itself: its config holds the request body (the password).
+      if (__DEV__) console.log(`Login failed: ${error.response?.status ?? 'no response'}`);
       throw new Error(error.response?.data?.message || 'Ongeldige inloggegevens');
     } finally {
       setIsLoading(false);
@@ -110,7 +111,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       
     } catch (error: any) {
-      console.error('Change password error:', error);
+      // Never log the axios error itself: its config holds both passwords and the token.
+      if (__DEV__) console.log(`Change password failed: ${error.response?.status ?? 'no response'}`);
       throw new Error(error.response?.data?.message || 'Kon wachtwoord niet wijzigen');
     } finally {
       setIsLoading(false);

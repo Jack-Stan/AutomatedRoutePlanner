@@ -85,6 +85,15 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Any exception a controller does not handle itself: the client gets a generic JSON 500 with no
+// exception text or stack trace (in every environment, so the Development error page never
+// leaks internals either). ExceptionHandlerMiddleware logs the full exception via ILogger at Error.
+app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
+{
+    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+    await context.Response.WriteAsJsonAsync(new { message = "Er is een fout opgetreden" });
+}));
+
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {

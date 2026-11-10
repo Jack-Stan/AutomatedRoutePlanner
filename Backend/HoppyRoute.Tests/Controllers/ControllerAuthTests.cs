@@ -30,10 +30,10 @@ namespace HoppyRoute.Tests.Controllers
 
         // ---- helpers ----
 
-        private async Task<(int Id, string Token)> UserAsync(UserRole role)
+        private async Task<(int Id, string Token)> UserAsync(UserRole role, int? zoneId = null)
         {
             var username = $"{role.ToString().ToLowerInvariant()}.{Guid.NewGuid():N}";
-            var id = _factory.SeedUser(role, username, Password);
+            var id = _factory.SeedUser(role, username, Password, zoneId);
             var login = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequestDto { Username = username, Password = Password });
             login.StatusCode.Should().Be(HttpStatusCode.OK);
             return (id, (await login.Content.ReadFromJsonAsync<LoginResponseDto>())!.Token);
@@ -141,9 +141,9 @@ namespace HoppyRoute.Tests.Controllers
         [InlineData(UserRole.FleetManager)]
         public async Task ApproveRoute_AsManager_Approves(UserRole role)
         {
-            var (managerId, token) = await UserAsync(role);
             var (swapperId, _) = await UserAsync(UserRole.BatterySwapper);
-            var (routeId, _, _) = SeedRoute(swapperId);
+            var (routeId, _, zoneId) = SeedRoute(swapperId);
+            var (managerId, token) = await UserAsync(role, zoneId); // a FleetManager acts in their own zone
 
             // A client-supplied approvedBy (here: the swapper) must be ignored; the token user is recorded.
             var response = await SendAsync("POST", $"/api/routes/{routeId}/approve", token, new { approvedBy = swapperId, notes = "test-only" });
@@ -158,9 +158,9 @@ namespace HoppyRoute.Tests.Controllers
         [Fact]
         public async Task ApproveRoute_WithoutBody_Approves_AndRecordsTheCaller()
         {
-            var (managerId, token) = await UserAsync(UserRole.FleetManager);
             var (swapperId, _) = await UserAsync(UserRole.BatterySwapper);
-            var (routeId, _, _) = SeedRoute(swapperId);
+            var (routeId, _, zoneId) = SeedRoute(swapperId);
+            var (managerId, token) = await UserAsync(UserRole.FleetManager, zoneId);
 
             var request = new HttpRequestMessage(HttpMethod.Post, $"/api/routes/{routeId}/approve"); // no content at all
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -181,9 +181,9 @@ namespace HoppyRoute.Tests.Controllers
         [Fact]
         public async Task RejectRoute_AsFleetManager_Rejects()
         {
-            var (managerId, token) = await UserAsync(UserRole.FleetManager);
             var (swapperId, _) = await UserAsync(UserRole.BatterySwapper);
-            var (routeId, _, _) = SeedRoute(swapperId);
+            var (routeId, _, zoneId) = SeedRoute(swapperId);
+            var (managerId, token) = await UserAsync(UserRole.FleetManager, zoneId);
 
             var response = await SendAsync("POST", $"/api/routes/{routeId}/reject", token, new { approvedBy = swapperId, notes = "test-only" });
 
@@ -283,11 +283,11 @@ namespace HoppyRoute.Tests.Controllers
         // ---- managers may act on any swapper's route ----
 
         [Fact]
-        public async Task CompleteStop_AsFleetManager_OnAnySwappersRoute_Completes()
+        public async Task CompleteStop_AsFleetManager_OnAnySwappersRouteInTheirZone_Completes()
         {
-            var (_, managerToken) = await UserAsync(UserRole.FleetManager);
             var (swapperId, _) = await UserAsync(UserRole.BatterySwapper);
-            var (_, stopId, _) = SeedRoute(swapperId);
+            var (_, stopId, zoneId) = SeedRoute(swapperId);
+            var (_, managerToken) = await UserAsync(UserRole.FleetManager, zoneId);
 
             (await SendAsync("POST", $"/api/routestops/{stopId}/complete", managerToken)).StatusCode.Should().Be(HttpStatusCode.OK);
         }

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using HoppyRoute.Application.DTOs;
 using HoppyRoute.Application.Interfaces;
+using HoppyRoute.Application.Mapping;
 using HoppyRoute.Infrastructure.Data;
 
 namespace HoppyRoute.Application.Services
@@ -195,25 +196,6 @@ namespace HoppyRoute.Application.Services
             return vehicles.Select(MapToVehicleDto).ToList();
         }
 
-        private VehicleDto MapToVehicleDto(Domain.Entities.Vehicle vehicle)
-        {
-            return new VehicleDto
-            {
-                Id = vehicle.Id,
-                ExternalId = vehicle.ExternalId,
-                RegistrationNumber = vehicle.RegistrationNumber,
-                VehicleType = vehicle.VehicleType,
-                ZoneId = vehicle.ZoneId,
-                ZoneName = vehicle.Zone?.Name,
-                CurrentParkingZoneId = vehicle.CurrentParkingZoneId,
-                CurrentParkingZoneName = vehicle.CurrentParkingZone?.Name,
-                Latitude = vehicle.Latitude,
-                Longitude = vehicle.Longitude,
-                BatteryLevel = vehicle.BatteryLevel,
-                NeedsBatteryReplacement = vehicle.NeedsBatteryReplacement,
-                IsAvailable = vehicle.IsAvailable,
-                LastUpdated = vehicle.LastUpdated
-            };
-        }
+        private VehicleDto MapToVehicleDto(Domain.Entities.Vehicle vehicle) => VehicleDtoMapper.ToDto(vehicle);
     }
 }

@@ -65,6 +65,7 @@ interface RouteStopDto {
   actualArrivalTime?: string;
   actualDepartureTime?: string;
   notes?: string; // Opmerking voor de battery swapper (max 500 tekens)
+  skipReason?: string; // Reden waarom de swapper de stop oversloeg (max 500 tekens)
 }
 
 interface RouteDto {
@@ -289,9 +290,10 @@ class ApiService {
   }
 
   // Accepted values: RouteStopStatus.InProgress (2) and RouteStopStatus.Skipped (4).
-  // Completing goes through completeRouteStop.
-  async updateRouteStopStatus(stopId: number, status: number): Promise<RouteStopDto> {
-    const response: AxiosResponse<RouteStopDto> = await this.api.put(`/routestops/${stopId}/status`, { status });
+  // Completing goes through completeRouteStop. `reason` (max 500) is only allowed with Skipped.
+  async updateRouteStopStatus(stopId: number, status: number, reason?: string): Promise<RouteStopDto> {
+    const body = reason ? { status, reason } : { status };
+    const response: AxiosResponse<RouteStopDto> = await this.api.put(`/routestops/${stopId}/status`, body);
     return response.data;
   }
 

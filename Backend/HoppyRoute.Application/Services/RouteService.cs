@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using HoppyRoute.Application.DTOs;
 using HoppyRoute.Application.Interfaces;
+using HoppyRoute.Application.Mapping;
 using HoppyRoute.Domain.Entities;
 using HoppyRoute.Domain.Enums;
 using HoppyRoute.Infrastructure.Data;
@@ -12,11 +13,12 @@ namespace HoppyRoute.Application.Services
         private readonly HoppyDbContext _context;
         private readonly IRouteOptimizationService _optimizationService;
 
-        public async Task<int?> GetAssignedSwapperIdAsync(int routeId)
+        public async Task<RouteAccessInfo?> GetAccessInfoAsync(int routeId)
         {
             return await _context.Routes
+                .AsNoTracking()
                 .Where(r => r.Id == routeId)
-                .Select(r => (int?)r.AssignedSwapperId)
+                .Select(r => new RouteAccessInfo(r.AssignedSwapperId, r.ZoneId))
                 .FirstOrDefaultAsync();
         }
 
@@ -99,6 +101,7 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
                 .Where(r => r.AssignedSwapperId == swapperId && 
                            (r.Status == RouteStatus.Suggested || r.Status == RouteStatus.Confirmed || 
                             r.Status == RouteStatus.InProgress || r.Status == RouteStatus.Completed));
@@ -116,13 +119,22 @@ namespace HoppyRoute.Application.Services
             return routes.Select(MapToRouteDto).ToList();
         }
 
-        public async Task<List<RouteDto>> GetAllRoutesAsync()
+        public async Task<List<RouteDto>> GetAllRoutesAsync(IReadOnlyCollection<int>? zoneIds = null)
         {
-            var routes = await _context.Routes
+            var query = _context.Routes
                 .Include(r => r.AssignedSwapper)
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
+                .AsQueryable();
+
+            if (zoneIds != null)
+            {
+                query = query.Where(r => zoneIds.Contains(r.ZoneId));
+            }
+
+            var routes = await query
                 .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync();
 
@@ -137,6 +149,7 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
                 .FirstOrDefaultAsync(r => r.AssignedSwapperId == swapperId && r.Date.Date == today);
 
             return route != null ? MapToRouteDto(route) : null;
@@ -224,6 +237,7 @@ namespace HoppyRoute.Application.Services
                     .Include(r => r.Zone)
                     .Include(r => r.Stops)
                         .ThenInclude(s => s.Vehicle)
+                            .ThenInclude(v => v.Zone)
                     .FirstOrDefaultAsync(r => r.Id == route.Id);
 
                 var routeDto = MapToRouteDto(createdRoute!);
@@ -243,6 +257,7 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
                 .Where(r => r.ZoneId == zoneId && (r.Status == RouteStatus.Suggested || r.Status == RouteStatus.Confirmed || r.Status == RouteStatus.InProgress || r.Status == RouteStatus.Completed))
                 .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync();
@@ -257,6 +272,7 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
                 .FirstOrDefaultAsync(r => r.Id == routeId);
 
             return route != null ? MapToRouteDto(route) : null;
@@ -269,6 +285,7 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
                 .FirstOrDefaultAsync(r => r.Id == routeId);
 
             if (route == null || route.Status != RouteStatus.Suggested)
@@ -288,6 +305,7 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
                 .Where(r => r.Status == status)
                 .ToListAsync();
 
@@ -326,23 +344,15 @@ namespace HoppyRoute.Application.Services
                     Id = s.Id,
                     RouteId = s.RouteId,
                     VehicleId = s.VehicleId,
-                    Vehicle = s.Vehicle != null ? new VehicleDto
-                    {
-                        Id = s.Vehicle.Id,
-                        ExternalId = s.Vehicle.ExternalId,
-                        ZoneId = s.Vehicle.ZoneId,
-                        Latitude = s.Vehicle.Latitude,
-                        Longitude = s.Vehicle.Longitude,
-                        BatteryLevel = s.Vehicle.BatteryLevel,
-                        LastUpdated = s.Vehicle.LastUpdated
-                    } : new VehicleDto(),
+                    Vehicle = s.Vehicle != null ? VehicleDtoMapper.ToDto(s.Vehicle) : new VehicleDto(),
                     Order = s.Order,
                     EstimatedArrivalOffset = s.EstimatedArrivalOffset,
                     EstimatedDurationAtStop = s.EstimatedDurationAtStop,
                     Status = s.Status,
                     ActualArrivalTime = s.ActualArrivalTime,
                     ActualDepartureTime = s.ActualDepartureTime,
-                    Notes = s.Notes // manager instructions, set via PUT routestops/{id}/instructions
+                    Notes = s.Notes, // manager instructions, set via PUT routestops/{id}/instructions
+                    SkipReason = s.SkipReason // set with status Skipped via PUT routestops/{id}/status
                 }).OrderBy(s => s.Order).ToList() ?? new List<RouteStopDto>()
             };
         }
@@ -490,7 +500,7 @@ namespace HoppyRoute.Application.Services
             return MapToRouteDto(route);
         }
 
-        public async Task<List<RouteDto>> GetRoutesPendingApprovalAsync(int? zoneId = null)
+        public async Task<List<RouteDto>> GetRoutesPendingApprovalAsync(int? zoneId = null, IReadOnlyCollection<int>? allowedZoneIds = null)
         {
             var query = _context.Routes
                 .Include(r => r.AssignedSwapper)
@@ -500,6 +510,11 @@ namespace HoppyRoute.Application.Services
             if (zoneId.HasValue)
             {
                 query = query.Where(r => r.ZoneId == zoneId.Value);
+            }
+
+            if (allowedZoneIds != null)
+            {
+                query = query.Where(r => allowedZoneIds.Contains(r.ZoneId));
             }
 
             var routes = await query.ToListAsync();

@@ -64,6 +64,8 @@ builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("Emai
 // Register services
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IZoneScopeService, ZoneScopeService>();
+builder.Services.AddScoped<HoppyRouteApi.Controllers.ZoneScopeGuard>();
 builder.Services.AddScoped<IRouteOptimizationService, HoppyRoute.Application.Services.RouteOptimizationService>();
 builder.Services.AddScoped<IRouteService, HoppyRoute.Application.Services.RouteService>();
 builder.Services.AddScoped<IVehicleService, HoppyRoute.Application.Services.VehicleService>();
@@ -125,6 +127,9 @@ using (var scope = app.Services.CreateScope())
     {
         // Only create database if it doesn't exist - don't delete existing data
         context.Database.EnsureCreated();
+
+        // EnsureCreated does not alter an existing database: add columns introduced after it was created.
+        SchemaUpgrades.Apply(context);
         
         // Check if we need to seed admin user
         if (!context.Users.Any())

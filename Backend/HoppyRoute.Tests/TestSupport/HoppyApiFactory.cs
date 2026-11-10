@@ -82,7 +82,7 @@ namespace HoppyRoute.Tests.TestSupport
         /// Adds an active user with a known (obviously fake) password straight into the test database
         /// and returns its id. Each call makes a fresh, uniquely named user so tests never share state.
         /// </summary>
-        public int SeedUser(UserRole role, string username, string password)
+        public int SeedUser(UserRole role, string username, string password, int? assignedZoneId = null, int? assignedRegionId = null)
         {
             using var scope = Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<HoppyDbContext>();
@@ -95,7 +95,9 @@ namespace HoppyRoute.Tests.TestSupport
                 FirstName = "Test",
                 LastName = role.ToString(),
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                AssignedZoneId = assignedZoneId,
+                AssignedRegionId = assignedRegionId
             };
             db.Users.Add(user);
             db.SaveChanges();

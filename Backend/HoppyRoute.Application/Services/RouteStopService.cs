@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using HoppyRoute.Application.DTOs;
 using HoppyRoute.Application.Interfaces;
+using HoppyRoute.Application.Mapping;
 using HoppyRoute.Domain.Enums;
 using HoppyRoute.Infrastructure.Data;
 
@@ -68,7 +69,7 @@ namespace HoppyRoute.Application.Services
             }).ToList();
         }
 
-        public async Task<RouteStopDto?> UpdateRouteStopStatusAsync(int routeStopId, RouteStopStatus status)
+        public async Task<RouteStopDto?> UpdateRouteStopStatusAsync(int routeStopId, RouteStopStatus status, string? reason = null)
         {
             var routeStop = await _context.RouteStops
                 .Include(s => s.Vehicle)
@@ -78,6 +79,7 @@ namespace HoppyRoute.Application.Services
             if (routeStop == null) return null;
 
             routeStop.Status = status;
+            routeStop.SkipReason = status == RouteStopStatus.Skipped && !string.IsNullOrWhiteSpace(reason) ? reason.Trim() : null;
             if (status == RouteStopStatus.InProgress)
             {
                 routeStop.ActualArrivalTime = DateTime.UtcNow;
@@ -91,11 +93,12 @@ namespace HoppyRoute.Application.Services
             return MapToRouteStopDto(routeStop);
         }
 
-        public async Task<int?> GetAssignedSwapperIdForStopAsync(int routeStopId)
+        public async Task<RouteAccessInfo?> GetAccessInfoForStopAsync(int routeStopId)
         {
             return await _context.RouteStops
+                .AsNoTracking()
                 .Where(s => s.Id == routeStopId)
-                .Select(s => (int?)s.Route.AssignedSwapperId)
+                .Select(s => new RouteAccessInfo(s.Route.AssignedSwapperId, s.Route.ZoneId))
                 .FirstOrDefaultAsync();
         }
 
@@ -140,23 +143,10 @@ namespace HoppyRoute.Application.Services
                 ActualArrivalTime = routeStop.ActualArrivalTime,
                 ActualDepartureTime = routeStop.ActualDepartureTime,
                 Notes = routeStop.Notes,
+                SkipReason = routeStop.SkipReason,
                 Latitude = routeStop.Latitude,
                 Longitude = routeStop.Longitude,
-                Vehicle = new VehicleDto
-                {
-                    Id = routeStop.Vehicle.Id,
-                    ExternalId = routeStop.Vehicle.ExternalId,
-                    RegistrationNumber = routeStop.Vehicle.RegistrationNumber,
-                    VehicleType = routeStop.Vehicle.VehicleType,
-                    ZoneId = routeStop.Vehicle.ZoneId,
-                    ZoneName = routeStop.Vehicle.Zone?.Name,
-                    Latitude = routeStop.Vehicle.Latitude,
-                    Longitude = routeStop.Vehicle.Longitude,
-                    BatteryLevel = routeStop.Vehicle.BatteryLevel,
-                    NeedsBatteryReplacement = routeStop.Vehicle.NeedsBatteryReplacement,
-                    IsAvailable = routeStop.Vehicle.IsAvailable,
-                    LastUpdated = routeStop.Vehicle.LastUpdated
-                }
+                Vehicle = VehicleDtoMapper.ToDto(routeStop.Vehicle)
             };
         }
     }

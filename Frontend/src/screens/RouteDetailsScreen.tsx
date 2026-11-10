@@ -104,8 +104,7 @@ export default function RouteDetailsScreen() {
     if (!selectedStopId) return;
     
     try {
-      await apiService.updateRouteStopStatus(selectedStopId, RouteStopStatus.Skipped);
-      // In a real app, you'd also save the comment
+      await apiService.updateRouteStopStatus(selectedStopId, RouteStopStatus.Skipped, comment.trim());
       Alert.alert('Succes', 'Stop overgeslagen met opmerking');
       setShowCommentModal(false);
       setComment('');
@@ -156,6 +155,12 @@ export default function RouteDetailsScreen() {
           <View style={styles.detailRow}>
             <Ionicons name="document-text-outline" size={16} color={HoppyColors.gray600} />
             <Text style={styles.detailText}>Opmerking: {stop.notes}</Text>
+          </View>
+        )}
+        {!!stop.skipReason && (
+          <View style={styles.detailRow}>
+            <Ionicons name="alert-circle-outline" size={16} color={HoppyColors.gray600} />
+            <Text style={styles.detailText}>Reden overgeslagen: {stop.skipReason}</Text>
           </View>
         )}
       </View>
@@ -286,6 +291,7 @@ export default function RouteDetailsScreen() {
               placeholder="Bijv. 'Voertuig niet gevonden' of 'Defect voertuig'"
               value={comment}
               onChangeText={setComment}
+              maxLength={500}
               multiline
               numberOfLines={3}
             />

@@ -147,6 +147,7 @@ namespace HoppyRoute.Infrastructure.Data
                 entity.Property(e => e.EstimatedDurationAtStop).IsRequired();
                 entity.Property(e => e.Status).IsRequired();
                 entity.Property(e => e.Notes).HasMaxLength(500);
+                entity.Property(e => e.SkipReason).HasMaxLength(500);
                 entity.Property(e => e.Latitude).HasPrecision(10, 7);
                 entity.Property(e => e.Longitude).HasPrecision(10, 7);
 

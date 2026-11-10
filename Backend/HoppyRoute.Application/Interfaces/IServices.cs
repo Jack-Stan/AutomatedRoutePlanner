@@ -118,7 +118,8 @@ namespace HoppyRoute.Application.Interfaces
     public interface IRouteStopService
     {
         Task<bool> CompleteRouteStopAsync(int routeStopId);
-        Task<RouteStopDto?> UpdateRouteStopStatusAsync(int routeStopId, RouteStopStatus status);
+        /// <summary>Sets the status; <paramref name="reason"/> is stored as SkipReason when the status is Skipped.</summary>
+        Task<RouteStopDto?> UpdateRouteStopStatusAsync(int routeStopId, RouteStopStatus status, string? reason = null);
         Task<List<RouteStopDto>> GetRouteStopsAsync(int routeId);
         Task<RouteStopDto?> GetRouteStopByIdAsync(int routeStopId);
         /// <summary>The swapper assigned to the route this stop belongs to, or null when the stop does not exist.</summary>

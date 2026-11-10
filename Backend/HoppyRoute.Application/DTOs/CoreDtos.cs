@@ -96,6 +96,7 @@ namespace HoppyRoute.Application.DTOs
         public DateTime? ActualArrivalTime { get; set; }
         public DateTime? ActualDepartureTime { get; set; }
         public string? Notes { get; set; }
+        public string? SkipReason { get; set; }
         public double? Latitude { get; set; }
         public double? Longitude { get; set; }
     }

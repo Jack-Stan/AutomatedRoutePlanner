@@ -342,7 +342,8 @@ namespace HoppyRoute.Application.Services
                     Status = s.Status,
                     ActualArrivalTime = s.ActualArrivalTime,
                     ActualDepartureTime = s.ActualDepartureTime,
-                    Notes = s.Notes // manager instructions, set via PUT routestops/{id}/instructions
+                    Notes = s.Notes, // manager instructions, set via PUT routestops/{id}/instructions
+                    SkipReason = s.SkipReason // set with status Skipped via PUT routestops/{id}/status
                 }).OrderBy(s => s.Order).ToList() ?? new List<RouteStopDto>()
             };
         }

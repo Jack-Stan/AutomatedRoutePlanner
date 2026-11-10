@@ -69,7 +69,7 @@ namespace HoppyRoute.Application.Services
             }).ToList();
         }
 
-        public async Task<RouteStopDto?> UpdateRouteStopStatusAsync(int routeStopId, RouteStopStatus status)
+        public async Task<RouteStopDto?> UpdateRouteStopStatusAsync(int routeStopId, RouteStopStatus status, string? reason = null)
         {
             var routeStop = await _context.RouteStops
                 .Include(s => s.Vehicle)
@@ -79,6 +79,7 @@ namespace HoppyRoute.Application.Services
             if (routeStop == null) return null;
 
             routeStop.Status = status;
+            routeStop.SkipReason = status == RouteStopStatus.Skipped && !string.IsNullOrWhiteSpace(reason) ? reason.Trim() : null;
             if (status == RouteStopStatus.InProgress)
             {
                 routeStop.ActualArrivalTime = DateTime.UtcNow;
@@ -141,6 +142,7 @@ namespace HoppyRoute.Application.Services
                 ActualArrivalTime = routeStop.ActualArrivalTime,
                 ActualDepartureTime = routeStop.ActualDepartureTime,
                 Notes = routeStop.Notes,
+                SkipReason = routeStop.SkipReason,
                 Latitude = routeStop.Latitude,
                 Longitude = routeStop.Longitude,
                 Vehicle = VehicleDtoMapper.ToDto(routeStop.Vehicle)

@@ -125,6 +125,9 @@ using (var scope = app.Services.CreateScope())
     {
         // Only create database if it doesn't exist - don't delete existing data
         context.Database.EnsureCreated();
+
+        // EnsureCreated does not alter an existing database: add columns introduced after it was created.
+        SchemaUpgrades.Apply(context);
         
         // Check if we need to seed admin user
         if (!context.Users.Any())

@@ -48,6 +48,10 @@ namespace HoppyRoute.Domain.Entities
         
         [StringLength(500)]
         public string? Notes { get; set; }
+
+        /// <summary>Why the swapper skipped this stop (optional, set together with Status = Skipped).</summary>
+        [StringLength(500)]
+        public string? SkipReason { get; set; }
         
         // GPS coordinates for the stop
         public double? Latitude { get; set; }

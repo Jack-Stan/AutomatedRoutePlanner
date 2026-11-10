@@ -39,7 +39,8 @@ namespace HoppyRouteApi.Controllers
         }
 
         /// <summary>
-        /// Zet een stop op onderweg (InProgress) of overgeslagen (Skipped).
+        /// Zet een stop op onderweg (InProgress) of overgeslagen (Skipped), bij Skipped met een optionele
+        /// reden (max 500 tekens, opgeslagen als SkipReason; bij InProgress is een reden een 400).
         /// Afronden gaat via POST {id}/complete, zodat de tijdstempels kloppen.
         /// Admin/FleetManager: elke stop. BatterySwapper: alleen stops op een eigen route.
         /// </summary>
@@ -54,6 +55,9 @@ namespace HoppyRouteApi.Controllers
             if (request.Status is not (RouteStopStatus.InProgress or RouteStopStatus.Skipped))
                 return BadRequest(new { message = "Alleen InProgress (2) en Skipped (4) zijn toegestaan; gebruik POST {id}/complete om af te ronden" });
 
+            if (request.Status != RouteStopStatus.Skipped && !string.IsNullOrWhiteSpace(request.Reason))
+                return BadRequest(new { message = "Een reden kan alleen samen met status Skipped (4) worden opgegeven" });
+
             var current = await _routeStopService.GetRouteStopByIdAsync(id);
             if (current == null)
                 return NotFound($"RouteStop met ID {id} niet gevonden");
@@ -61,7 +65,7 @@ namespace HoppyRouteApi.Controllers
             if (current.Status is RouteStopStatus.Completed or RouteStopStatus.Skipped)
                 return Conflict(new { message = "Deze stop is al voltooid of overgeslagen" });
 
-            var updated = await _routeStopService.UpdateRouteStopStatusAsync(id, request.Status);
+            var updated = await _routeStopService.UpdateRouteStopStatusAsync(id, request.Status, request.Reason);
             return updated == null ? NotFound($"RouteStop met ID {id} niet gevonden") : Ok(updated);
         }
 

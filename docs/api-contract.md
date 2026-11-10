@@ -2,7 +2,7 @@
 
 Source of truth for what `Frontend/src/services/api.ts` may call. Every call in that file (52 methods) is listed with the screens that use it, the matching backend route and a verdict. Nothing else in `Frontend/` talks HTTP (`axios` is only imported in `api.ts`).
 
-Base URL `/api`. Every route needs `Authorization: Bearer <jwt>` unless it says **public**. Roles come from the token's `role` claim: `Admin`, `FleetManager`, `BatterySwapper`. "Manager" = Admin or FleetManager. "Own" = a BatterySwapper only on a route assigned to them (403 for someone else's, 404 if it does not exist).
+Base URL `/api`. Every route needs `Authorization: Bearer <jwt>` unless it says **public**. Roles come from the token's `role` claim: `Admin`, `FleetManager`, `BatterySwapper`. "Manager" = Admin or FleetManager. "Own" = a BatterySwapper only on a route assigned to them (403 for someone else's, 404 if it does not exist). "In scope" = a FleetManager only on routes and stops in their own zone or region (section 7); an Admin is always in scope. Out of scope is 403, and an unknown id is 404.
 
 Verdicts:
 
@@ -36,16 +36,16 @@ Screens: Login, ResetPw (ResetPasswordScreen), FirstLogin, Dashboard, Routes, Ro
 
 | api.ts method | HTTP | Screens | Backend | Verdict |
 |---|---|---|---|---|
-| generateRoute | POST /routes/suggest | RouteGen | same, Manager | ok |
+| generateRoute | POST /routes/suggest | RouteGen | same, Admin or FleetManager with the body's `zoneId` in scope | ok |
 | suggestRoute | POST /routes/suggest | none (duplicate of generateRoute) | same | dead (backend route kept) |
-| getRouteSuggestions | GET /routes/suggestions?zoneId= | Dashboard, Routes | same, any role (swapper gets own routes only) | ok |
-| getAllRoutes | GET /routes/all | Routes (Manager branch) | same, Manager | ok |
-| getRoute | GET /routes/{id} | RouteDetails, Redux | same, Manager or own | ok |
-| confirmRoute | POST /routes/{id}/confirm | Routes | same, Manager or own | ok |
-| getTodaysRoute | GET /routes/today?swapperId= | none | same, Manager or own id | dead (backend route kept) |
-| approveRoute | POST /routes/{id}/approve | none | same, Manager; body is `{notes?}` only, approver = token user | dead (backend route kept) |
-| rejectRoute | POST /routes/{id}/reject | none | same, Manager; same body rule | dead (backend route kept) |
-| getRoutesPendingApproval | GET /routes/pending-approval[?zoneId=] | none | same, Manager | dead (backend route kept) |
+| getRouteSuggestions | GET /routes/suggestions?zoneId= | Dashboard, Routes | same, any role (swapper: own routes only; FleetManager: a zone out of scope is an **empty list**, not a 403) | ok |
+| getAllRoutes | GET /routes/all | Routes (Manager branch) | same, Admin: all routes; FleetManager: only routes in scope (empty list when unassigned) | ok |
+| getRoute | GET /routes/{id} | RouteDetails, Redux | same, Admin; FleetManager in scope; swapper own | ok |
+| confirmRoute | POST /routes/{id}/confirm | Routes | same, Admin; FleetManager in scope; swapper own | ok |
+| getTodaysRoute | GET /routes/today?swapperId= | none | same, Admin; FleetManager when that route is in scope; swapper own id | dead (backend route kept) |
+| approveRoute | POST /routes/{id}/approve | none | same, Admin or FleetManager in scope; body is `{notes?}` only, approver = token user | dead (backend route kept) |
+| rejectRoute | POST /routes/{id}/reject | none | same, same rules | dead (backend route kept) |
+| getRoutesPendingApproval | GET /routes/pending-approval[?zoneId=] | none | same, Admin: all; FleetManager: only routes in scope | dead (backend route kept) |
 | getRoutes | GET /routes | Redux | none | dead |
 | createRoute | POST /routes | Redux | none | dead |
 | updateRoute | PUT /routes/{id} | Redux | none | dead |
@@ -56,9 +56,9 @@ Screens: Login, ResetPw (ResetPasswordScreen), FirstLogin, Dashboard, Routes, Ro
 
 | api.ts method | HTTP (old) | Screens | Backend (new) | Verdict |
 |---|---|---|---|---|
-| completeRouteStop | POST /routestops/{routeId}/stops/{stopId}/complete | RouteDetails | **POST /routestops/{stopId}/complete**, any role, Manager or own | path-mismatch (frontend: done) |
-| updateRouteStopStatus | PUT /routestops/{routeId}/stops/{stopId}/status | RouteDetails ("Probleem melden") | **PUT /routestops/{stopId}/status**, any role, Manager or own | build (frontend: done) |
-| updateRouteStopInstructions | PUT /routes/{routeId}/stops/{stopId}/instructions | RouteGen (edit modal) | **PUT /routestops/{stopId}/instructions**, Manager | build (frontend: done) |
+| completeRouteStop | POST /routestops/{routeId}/stops/{stopId}/complete | RouteDetails | **POST /routestops/{stopId}/complete**, any role: Admin; FleetManager in scope; swapper own | path-mismatch (frontend: done) |
+| updateRouteStopStatus | PUT /routestops/{routeId}/stops/{stopId}/status | RouteDetails ("Probleem melden") | **PUT /routestops/{stopId}/status**, any role: Admin; FleetManager in scope; swapper own. Body `{ status, reason? }` | build (frontend: done) |
+| updateRouteStopInstructions | PUT /routes/{routeId}/stops/{stopId}/instructions | RouteGen (edit modal) | **PUT /routestops/{stopId}/instructions**, Admin or FleetManager in scope | build (frontend: done) |
 
 ### Vehicles
 
@@ -111,20 +111,21 @@ Both are keyed by the **stop id** only (the route is derived server-side), like 
 
 ### PUT /api/routestops/{id}/status
 
-Body `{ "status": <number> }`. Returns the stop (`RouteStopDto`, status numeric).
+Body `{ "status": <number>, "reason"?: "<string, max 500>" }`. Returns the stop (`RouteStopDto`, status numeric, with `skipReason`).
 
-- Roles: Admin, FleetManager (any stop); BatterySwapper (stops on their own route only).
+- Roles: Admin (any stop); FleetManager (stops in their own zone or region); BatterySwapper (stops on their own route only).
 - Accepted values: **2 (InProgress)** and **4 (Skipped)**. Starting a stop stamps `actualArrivalTime`. Completing is not accepted here (400): use `POST /routestops/{id}/complete`, which stamps the times.
-- 400 for any other value, 409 when the stop is already Completed or Skipped, 404 unknown stop, 403 someone else's route, 401 no token.
+- **`reason`** is stored as `skipReason`, trimmed, and only together with Skipped. An empty or whitespace reason stores nothing. A non-empty reason with any other status is a **400** (rather than being silently dropped), and so is a reason over 500 characters. `skipReason` comes back on the stop here and on every stop inside route DTOs.
+- 400 for any other value, 409 when the stop is already Completed or Skipped, 404 unknown stop, 403 out of scope or someone else's route, 401 no token.
 
 ### PUT /api/routestops/{id}/instructions
 
 Body `{ "notes": "<string, max 500>" }`. Replaces the stop's note; `""` or `null` clears it. Returns the stop (`RouteStopDto`, with `notes`).
 
-- Role: Admin, FleetManager only (403 for a swapper, even on their own stop).
+- Role: Admin, or FleetManager for a stop in their own zone or region (403 for a swapper, even on their own stop, and for a FleetManager out of scope).
 - 400 over 500 characters, 404 unknown stop, 401 no token.
 - Swappers read it as `notes` on each stop of `GET /routes/{id}` (the route mapper now includes it).
-- One field, not two: the database has a single `RouteStop.Notes` column (500 chars). The old `specialInstructions` and `batterySwapNotes` do not exist on the backend. Two fields would need two new columns, and the database is created with `EnsureCreated`, so existing databases would also need a manual `ALTER TABLE`. That is a follow-up if wanted.
+- One field, not two: the database has a single `RouteStop.Notes` column (500 chars). The old `specialInstructions` and `batterySwapNotes` do not exist on the backend. Two fields would need two new columns plus a startup step like the one for `SkipReason` (section 8). That is a follow-up if wanted.
 
 ### Also changed
 
@@ -147,6 +148,7 @@ The frontend disagrees in four places (frontend work list, section 5).
 ## 4. Role changes made in this contract work
 
 - Stop status and instructions endpoints (new), rules above.
+- Zone scoping for FleetManagers (section 7) on the route and stop endpoints above.
 - `GET /auth/users?role=2` opened to FleetManager. Before that, RouteGenerationScreen (Admin and FleetManager) got a 403 for a FleetManager, and `api.ts` clears the stored session on a 403. This is in its own commit so it can be reverted on its own.
 
 ## 5. Frontend work list (AOIFE)
@@ -165,10 +167,44 @@ Status: **all six items done** on branch `fix/frontend-contract`. Verified with 
 
 Still needs a real device or emulator (no Expo here): the swapper's "Swap Voltooid" and "Probleem Melden" buttons now rendering on Pending (1) stops, complete and skip round trips, the merged notes modal (500 character limit, counter) and `notes` showing on RouteDetails and in the RouteGen preview, and a fresh `npm install` without the Redux packages.
 
-## 6. Not done, listed for Stan
+## 6. Done since (leftovers)
 
-- A FleetManager is not zone-scoped: any FleetManager can approve, confirm or complete routes and list swappers in any zone.
-- The skip-stop modal collects a comment that is not stored. It needs a second column (see the instructions note above).
+- Stop vehicles on every route DTO now carry `registrationNumber`, `vehicleType`, `zoneName`, `needsBatteryReplacement` and `isAvailable` (one shared `VehicleDtoMapper`; the zone name comes from an `Include`, in the same query).
+- The skip comment is stored (`skipReason`, section 2), sent by RouteDetailsScreen as `reason`, and shown on the stop.
+- FleetManager zone scoping (section 7).
+
+## 7. Zone scoping for FleetManagers
+
+A FleetManager's scope comes from their user record, read from the database on every request (not from the token, so an admin changing an assignment or deactivating the account applies at once):
+
+1. `assignedZoneId` set: that zone only. The narrowest assignment wins, so if a region is also set it is ignored.
+2. else `assignedRegionId` set: every zone of that region.
+3. else **no scope**: an unassigned FleetManager manages nothing, lists nothing and gets 403 on every action. An admin must assign a zone or region first.
+
+Admins are global. Inactive, unknown and non-FleetManager users have no scope.
+
+Enforced (403 out of scope, 404 unknown id): `POST /routes/suggest` (body `zoneId`), `POST /routes/{id}/approve|reject|confirm`, `POST /routestops/{id}/complete`, `PUT /routestops/{id}/status|instructions`, `GET /routes/{id}`, `GET /routes/today`.
+
+Lists (empty 200, never a 403): `GET /routes/all`, `GET /routes/pending-approval` (a `zoneId` filter outside the scope is also empty) and `GET /routes/suggestions?zoneId=` for a zone outside the scope. The empty list matters because `DashboardScreen` and `RoutesScreen` call `suggestions` with a hard-coded zone (2) and `api.ts` clears the stored session on any 403.
+
+Not scoped: `GET /auth/users?role=2` (the swapper list) and the vehicle, zone and region reads, because swappers are not required to have an assignment and a scoped list would leave a FleetManager unable to assign anyone.
+
+## 8. Schema change: `RouteStops.SkipReason`
+
+The database is created with `EnsureCreated`, which never alters an existing database, and EF selects every mapped column, so a missing column would break every route and stop query on an existing database. `SchemaUpgrades.Apply` therefore runs at startup right after `EnsureCreated` and executes, on SQL Server only:
+
+```sql
+IF OBJECT_ID(N'[dbo].[RouteStops]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.RouteStops', N'SkipReason') IS NULL
+    ALTER TABLE [dbo].[RouteStops] ADD [SkipReason] nvarchar(500) NULL
+```
+
+It is idempotent (a fresh database already has the column) and needs `ALTER` permission on `RouteStops` for the app's database user. On an existing database `EnsureCreated` does nothing, so that user may not have it today. If the permission is withheld, the step fails: the error is logged by the existing "Database initialization failed" handler, the app keeps starting (as for any other startup database error), and route and stop queries then fail with "Invalid column name 'SkipReason'". In that case run the statement above once as a DBA.
+
+## 9. Not done, listed for Stan
+
+- **Unassigned FleetManagers are locked out** of route management until an admin gives them a zone or region (section 7). Existing FleetManagers created without an assignment are affected.
+- **`api.ts` clears the stored session on any 403** (as well as 401). Role and scope 403s are normal answers now, so a stray out-of-scope call logs the user out. Clearing on 401 only would be safer. This is frontend work.
+- The swapper list `GET /auth/users?role=2` is not zone-scoped (see section 7).
+- Zone and region assignment is not validated against each other: a FleetManager can have a zone outside their region; the zone wins.
 - VehiclesScreen and VehicleDetailsScreen have a "Swap voltooid" button that only shows an alert (`// In a real app, this would update the vehicle's battery level`). There is no API call, so no endpoint was built. Whether a swap outside a route should exist, and who may do it, is a design question.
 - RouteGenerationScreen "Route doorsturen" and RoutesScreen "Route genereren" are stubs with no API call. The backend already creates generated routes as PendingApproval.
-- The route mapper (`RouteService.MapToRouteDto`) leaves `registrationNumber`, `vehicleType` and `zoneName` empty on each stop's vehicle, so those render blank on RouteDetails and in the RouteGen preview.

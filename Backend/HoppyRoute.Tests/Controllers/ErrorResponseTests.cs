@@ -69,8 +69,8 @@ namespace HoppyRoute.Tests.Controllers
         [Theory]
         [InlineData("GET", "/api/auth/users/count", true)]   // caught in AuthController
         [InlineData("POST", "/api/auth/login", false)]       // caught in AuthController (was a 400 with ex.Message)
-        [InlineData("GET", "/api/zones/count", false)]       // caught in ZonesController
-        [InlineData("GET", "/api/vehicles/lowbattery/all", false)] // not caught: global exception handler
+        [InlineData("GET", "/api/zones/count", true)]       // caught in ZonesController
+        [InlineData("GET", "/api/vehicles/lowbattery/all", true)] // not caught: global exception handler
         public async Task UnexpectedException_Returns500_WithoutExceptionText_AndIsLogged(string method, string url, bool asAdmin)
         {
             var client = _factory.CreateClient();

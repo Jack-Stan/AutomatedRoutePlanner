@@ -22,6 +22,7 @@ import { apiService, RouteDto } from '../services/api';
 import { RootStackParamList, BottomTabParamList } from '../types';
 import { HoppyButton, HoppyLogo } from '../components';
 import { useAuth, isAdmin, isFleetManager } from '../contexts/AuthContext';
+import { logApiError } from '../utils/devLog';
 
 type RoutesScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<BottomTabParamList, 'Routes'>,
@@ -71,7 +72,7 @@ export default function RoutesScreen() {
       
       setRoutes(routeData);
     } catch (err: any) {
-      console.error('Error fetching routes:', err);
+      logApiError('Error fetching routes', err);
       
       let errorMessage = 'Fout bij ophalen van routes';
       if (err.response?.status === 403) {

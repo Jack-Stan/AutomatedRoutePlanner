@@ -16,6 +16,7 @@ import { apiService, VehicleDto } from '../services/api';
 import { RootStackParamList } from '../types';
 import { HoppyButton, HoppyCard } from '../components';
 import { useAuth } from '../contexts/AuthContext';
+import { logApiError } from '../utils/devLog';
 
 type VehicleDetailsScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -45,7 +46,7 @@ export default function VehicleDetailsScreen() {
       const foundVehicle = vehicles.find(v => v.id === vehicleId);
       setVehicle(foundVehicle || null);
     } catch (err: any) {
-      console.error('Error fetching vehicle details:', err);
+      logApiError('Error fetching vehicle details', err);
       setError(err.response?.data?.message || err.message || 'Fout bij ophalen van voertuig details');
     } finally {
       setLoading(false);

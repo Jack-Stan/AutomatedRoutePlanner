@@ -12,6 +12,14 @@ namespace HoppyRoute.Application.Services
         private readonly HoppyDbContext _context;
         private readonly IRouteOptimizationService _optimizationService;
 
+        public async Task<int?> GetAssignedSwapperIdAsync(int routeId)
+        {
+            return await _context.Routes
+                .Where(r => r.Id == routeId)
+                .Select(r => (int?)r.AssignedSwapperId)
+                .FirstOrDefaultAsync();
+        }
+
         public RouteService(HoppyDbContext context, IRouteOptimizationService optimizationService)
         {
             _context = context;

@@ -10,13 +10,13 @@ import {
   Modal,
   RefreshControl,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { HoppyColors, HoppyTheme } from '../theme';
 import { HoppyButton, HoppyCard, SuccessPopup, EditUserModal } from '../components';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth, User, isAdmin, isFleetManager, getRoleDisplayName } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
+import { logApiError } from '../utils/devLog';
 
 interface CreateUserData {
   email: string;
@@ -69,26 +69,7 @@ export default function UserManagementScreen() {
 
   useEffect(() => {
     fetchUsers();
-    // Test API connection
-    testApiConnection();
   }, []);
-
-  const testApiConnection = async () => {
-    try {
-      console.log('Testing API connection...');
-      const token = await AsyncStorage.getItem('authToken');
-      const userData = await AsyncStorage.getItem('userData');
-      console.log('Stored auth token:', token ? 'EXISTS' : 'MISSING');
-      console.log('Stored user data:', userData ? 'EXISTS' : 'MISSING');
-      
-      if (userData) {
-        const parsedUser = JSON.parse(userData);
-        console.log('Current user:', parsedUser);
-      }
-    } catch (error) {
-      console.error('Error testing API connection:', error);
-    }
-  };
 
   const fetchUsers = async (isRefresh = false) => {
     try {
@@ -98,16 +79,10 @@ export default function UserManagementScreen() {
         setLoading(true);
       }
       // Use API service to get users
-      console.log('Fetching users...');
       const userData = await apiService.getUsers();
-      console.log('Fetched users:', userData.length, 'users');
-      console.log('Users data:', userData);
       setUsers(userData);
     } catch (error: any) {
-      console.error('Error fetching users:', error);
-      console.error('Error response:', error.response);
-      console.error('Error status:', error.response?.status);
-      console.error('Error data:', error.response?.data);
+      logApiError('Error fetching users', error);
       
       let errorMessage = 'Kon gebruikers niet laden';
       if (error.response?.status === 401) {
@@ -179,15 +154,6 @@ export default function UserManagementScreen() {
       }
 
       // Use API service to create user
-      console.log('Creating user:', newUser);
-      console.log('Mapped role:', mapRoleToEnum(newUser.role));
-      console.log('Request payload:', {
-        email: newUser.email,
-        firstName: newUser.firstName,
-        lastName: newUser.lastName,
-        role: mapRoleToEnum(newUser.role),
-        assignedZoneId: newUser.assignedZones?.[0], // Take first assigned zone if any
-      });
       const createdUser = await apiService.createUser({
         email: newUser.email,
         firstName: newUser.firstName,
@@ -195,7 +161,6 @@ export default function UserManagementScreen() {
         role: mapRoleToEnum(newUser.role),
         assignedZoneId: newUser.assignedZones?.[0], // Take first assigned zone if any
       });
-      console.log('User created successfully:', createdUser);
 
       // Immediately add the new user to the list for instant UI update
       setUsers(prevUsers => [...prevUsers, createdUser]);
@@ -215,9 +180,8 @@ export default function UserManagementScreen() {
       });
       
       // No need to refresh from server since optimistic update already succeeded
-      console.log('User creation completed successfully with optimistic update');
     } catch (error: any) {
-      console.error('Error creating user:', error);
+      logApiError('Error creating user', error);
       
       // If creation failed, remove the optimistically added user
       setUsers(prevUsers => prevUsers.filter(u => u.email !== newUser.email));
@@ -273,9 +237,8 @@ export default function UserManagementScreen() {
       showSuccess('Gebruiker Verwijderd', 'Gebruiker is succesvol verwijderd.');
       
       // No need to refresh from server since optimistic update already succeeded
-      console.log('User deletion completed successfully with optimistic update');
     } catch (error: any) {
-      console.error('Error deleting user:', error);
+      logApiError('Error deleting user', error);
       
       // Check if it's a specific error about routes
       if (error.response?.data?.message?.includes('gekoppeld is aan routes')) {
@@ -315,7 +278,7 @@ export default function UserManagementScreen() {
         result.message || 'Nieuw tijdelijk wachtwoord verzonden naar gebruiker.'
       );
     } catch (error: any) {
-      console.error('Error resetting password:', error);
+      logApiError('Error resetting password', error);
       
       let errorMessage = 'Kon wachtwoord niet resetten';
       if (error.response?.data?.message) {
@@ -358,9 +321,8 @@ export default function UserManagementScreen() {
       setSelectedUser(null);
       
       // No need to refresh from server since optimistic update already succeeded
-      console.log('User update completed successfully with optimistic update');
     } catch (error: any) {
-      console.error('Error updating user:', error);
+      logApiError('Error updating user', error);
       
       // If update failed, refresh to restore original data
       fetchUsers();
@@ -418,7 +380,7 @@ export default function UserManagementScreen() {
         );
       }
     } catch (error) {
-      console.error('Error fetching zones:', error);
+      logApiError('Error fetching zones', error);
       Alert.alert('Fout', 'Kon zones niet ophalen');
     }
   };
@@ -438,7 +400,7 @@ export default function UserManagementScreen() {
       
       showSuccess('Zone Gewijzigd', `Zone succesvol gewijzigd naar ${zoneName}`);
     } catch (error) {
-      console.error('Error updating user zone:', error);
+      logApiError('Error updating user zone', error);
       Alert.alert('Fout', 'Kon zone niet wijzigen');
     }
   };
@@ -458,7 +420,7 @@ export default function UserManagementScreen() {
       
       showSuccess('Regio Gewijzigd', `Regio succesvol gewijzigd naar ${regionName}`);
     } catch (error) {
-      console.error('Error updating user region:', error);
+      logApiError('Error updating user region', error);
       Alert.alert('Fout', 'Kon regio niet wijzigen');
     }
   };

@@ -515,7 +515,8 @@ namespace HoppyRoute.Tests.Controllers
                 temporaryPassword = "test-only"
             }));
 
-            response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+            // Anonymous callers get 401 on any non-public path (default-deny fallback policy), admins a 404.
+            response.StatusCode.Should().Be(asAdmin ? HttpStatusCode.NotFound : HttpStatusCode.Unauthorized);
             _factory.EmailService.Verify(e => e.SendTemporaryPasswordEmailAsync(
                 "victim@test.invalid", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }

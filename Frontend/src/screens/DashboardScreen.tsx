@@ -21,6 +21,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import LanguageMenu from '../components/LanguageMenu';
 import { RootStackParamList, BottomTabParamList } from '../types';
+import { logApiError } from '../utils/devLog';
 
 // Icon component using Font Awesome and Material Icons
 const Icon = ({ name, size = 24, color = HoppyColors.gray600 }: { name: string; size?: number; color?: string }) => {
@@ -117,14 +118,14 @@ export default function DashboardScreen() {
           setActiveUsersCount(usersCount);
           setZonesCount(zonesCountData);
         } catch (adminError: any) {
-          console.warn('Failed to fetch admin statistics:', adminError);
+          logApiError('Failed to fetch admin statistics', adminError);
           // Continue without admin stats rather than failing completely
           setActiveUsersCount(0);
           setZonesCount(0);
         }
       }
     } catch (err: any) {
-      console.error('Error fetching dashboard data:', err);
+      logApiError('Error fetching dashboard data', err);
       setError(err.response?.data?.message || err.message || 'Fout bij laden van dashboard');
     } finally {
       setLoading(false);

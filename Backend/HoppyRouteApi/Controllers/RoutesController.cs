@@ -22,6 +22,7 @@ namespace HoppyRouteApi.Controllers
         /// Genereer routesuggestie
         /// </summary>
         [HttpPost("suggest")]
+        [Authorize(Roles = Roles.Managers)]
         public async Task<ActionResult<RouteGenerationResponse>> SuggestRoute([FromBody] RouteGenerationRequest request)
         {
             if (!ModelState.IsValid)
@@ -81,48 +82,9 @@ namespace HoppyRouteApi.Controllers
         /// Haal alle routes op (voor Admin en FleetManager)
         /// </summary>
         [HttpGet("all")]
+        [Authorize(Roles = Roles.Managers)]
         public async Task<ActionResult<List<RouteDto>>> GetAllRoutes()
         {
-            // Debug: Print all claims
-            Console.WriteLine("=== ALL CLAIMS DEBUG ===");
-            foreach (var claim in User.Claims)
-            {
-                Console.WriteLine($"Claim Type: '{claim.Type}' = Value: '{claim.Value}'");
-            }
-            Console.WriteLine("=== END CLAIMS DEBUG ===");
-            
-            // Check if user is admin or fleet manager - support both string and numeric role formats
-            var userRoleClaim = User.FindFirst("role") ?? 
-                                User.FindFirst(ClaimTypes.Role) ??
-                                User.FindFirst("http://schemas.microsoft.com/ws/2008/06/identity/claims/role");
-            var roleValue = userRoleClaim?.Value;
-            
-            Console.WriteLine($"Role claim found: '{roleValue}' (from claim type: '{userRoleClaim?.Type}')");
-            
-            bool isAuthorized = false;
-            if (roleValue != null)
-            {
-                // Check string format first (new format)
-                if (roleValue == "Admin" || roleValue == "FleetManager")
-                {
-                    isAuthorized = true;
-                    Console.WriteLine($"Authorized via string format: {roleValue}");
-                }
-                // Check numeric format for backwards compatibility (old format)
-                else if (int.TryParse(roleValue, out int numericRole))
-                {
-                    isAuthorized = numericRole == 0 || numericRole == 1; // Admin=0, FleetManager=1
-                    Console.WriteLine($"Checked numeric format: {numericRole}, authorized: {isAuthorized}");
-                }
-            }
-            
-            Console.WriteLine($"Final authorization result: {isAuthorized}");
-            
-            if (!isAuthorized)
-            {
-                return StatusCode(403, new { message = "Alleen administrators en fleet managers kunnen alle routes bekijken" });
-            }
-
             var routes = await _routeService.GetAllRoutesAsync();
             return Ok(routes);
         }
@@ -131,8 +93,14 @@ namespace HoppyRouteApi.Controllers
         /// Fleetmanager bevestigt route
         /// </summary>
         [HttpPost("{id}/confirm")]
+        [Authorize(Roles = Roles.AnyRole)]
         public async Task<ActionResult<RouteDto>> ConfirmRoute(int id)
         {
+            // RoutesScreen shows "Route Bevestigen" to every role; a swapper may only confirm their own route.
+            var denied = await DenyUnlessManagerOrAssignedSwapperAsync(id);
+            if (denied != null)
+                return denied;
+
             var route = await _routeService.ConfirmRouteAsync(id);
             
             if (route == null)
@@ -147,6 +115,10 @@ namespace HoppyRouteApi.Controllers
         [HttpGet("today")]
         public async Task<ActionResult<RouteDto>> GetTodaysRoute([FromQuery] int swapperId)
         {
+            // A swapper may only look up their own route of the day.
+            if (!User.IsManager() && User.GetUserId() != swapperId)
+                return Forbid();
+
             var route = await _routeService.GetTodaysRouteForSwapperAsync(swapperId);
             
             if (route == null)
@@ -161,6 +133,10 @@ namespace HoppyRouteApi.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<RouteDto>> GetRoute(int id)
         {
+            var denied = await DenyUnlessManagerOrAssignedSwapperAsync(id);
+            if (denied != null)
+                return denied;
+
             var route = await _routeService.GetRouteByIdAsync(id);
             
             if (route == null)
@@ -173,6 +149,7 @@ namespace HoppyRouteApi.Controllers
         /// FleetManager/Admin keurt route goed
         /// </summary>
         [HttpPost("{id}/approve")]
+        [Authorize(Roles = Roles.Managers)]
         public async Task<ActionResult<RouteDto>> ApproveRoute(int id, [FromBody] RouteApprovalRequest request)
         {
             var route = await _routeService.ApproveRouteAsync(id, request.ApprovedBy, request.Notes);
@@ -186,6 +163,7 @@ namespace HoppyRouteApi.Controllers
         /// FleetManager/Admin wijst route af
         /// </summary>
         [HttpPost("{id}/reject")]
+        [Authorize(Roles = Roles.Managers)]
         public async Task<ActionResult<RouteDto>> RejectRoute(int id, [FromBody] RouteApprovalRequest request)
         {
             var route = await _routeService.RejectRouteAsync(id, request.ApprovedBy, request.Notes);
@@ -199,10 +177,27 @@ namespace HoppyRouteApi.Controllers
         /// Routes die goedkeuring nodig hebben
         /// </summary>
         [HttpGet("pending-approval")]
+        [Authorize(Roles = Roles.Managers)]
         public async Task<ActionResult<List<RouteDto>>> GetRoutesPendingApproval([FromQuery] int? zoneId = null)
         {
             var routes = await _routeService.GetRoutesPendingApprovalAsync(zoneId);
             return Ok(routes);
+        }
+
+        /// <summary>
+        /// Managers may act on any route. Anyone else only on a route assigned to them:
+        /// 404 when the route does not exist, 403 when it belongs to someone else, null when allowed.
+        /// </summary>
+        private async Task<ActionResult?> DenyUnlessManagerOrAssignedSwapperAsync(int routeId)
+        {
+            if (User.IsManager())
+                return null;
+
+            var ownerId = await _routeService.GetAssignedSwapperIdAsync(routeId);
+            if (ownerId == null)
+                return NotFound($"Route met ID {routeId} niet gevonden");
+
+            return User.GetUserId() == ownerId ? null : Forbid();
         }
     }
 }

@@ -19,6 +19,7 @@ import { RootStackParamList, RouteStopStatus } from '../types';
 import { HoppyButton, HoppyCard } from '../components';
 import { useAuth } from '../contexts/AuthContext';
 import { logApiError } from '../utils/devLog';
+import { getApiErrorMessage } from '../utils/apiError';
 
 type RouteDetailsScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -49,7 +50,7 @@ export default function RouteDetailsScreen() {
       setRouteData(data);
     } catch (err: any) {
       logApiError('Error fetching route details', err);
-      setError(err.response?.data?.message || err.message || 'Fout bij ophalen van route details');
+      setError(getApiErrorMessage(err, 'Fout bij ophalen van route details'));
     } finally {
       setLoading(false);
     }
@@ -91,7 +92,7 @@ export default function RouteDetailsScreen() {
       Alert.alert('Succes', 'Stop gemarkeerd als voltooid!');
       fetchRouteDetails(); // Refresh data
     } catch (err: any) {
-      Alert.alert('Fout', err.response?.data?.message || 'Fout bij voltooien van stop');
+      Alert.alert('Fout', getApiErrorMessage(err, 'Fout bij voltooien van stop'));
     }
   };
 
@@ -111,7 +112,7 @@ export default function RouteDetailsScreen() {
       setSelectedStopId(null);
       fetchRouteDetails(); // Refresh data
     } catch (err: any) {
-      Alert.alert('Fout', err.response?.data?.message || 'Fout bij overslaan van stop');
+      Alert.alert('Fout', getApiErrorMessage(err, 'Fout bij overslaan van stop'));
     }
   };
 

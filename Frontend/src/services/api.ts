@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { FORBIDDEN_MESSAGE } from '../utils/apiError';
 
 // DTOs gebaseerd op de werkelijke backend
 interface VehicleDto {
@@ -202,15 +203,25 @@ class ApiService {
           console.log(`API ${error.config?.method?.toUpperCase()} ${error.config?.url} -> ${error.response?.status ?? 'no response'}`);
         }
 
-        // 401: token expired or invalid. 403: might be an old token format.
-        // Either way drop the stored session so the user logs in again.
-        if (error.response?.status === 401 || error.response?.status === 403) {
+        // 401: token expired or invalid. Drop the stored session and send the
+        // user to login.
+        if (error.response?.status === 401) {
           try {
             await AsyncStorage.removeItem('authToken');
             await AsyncStorage.removeItem('userData');
           } catch {
             if (__DEV__) console.warn('Could not clear auth storage');
           }
+          this.onAuthLogout?.();
+        }
+
+        // 403: the user is logged in but not allowed (role or zone scope).
+        // That is a normal answer, so the session stays. Give callers a clear message.
+        if (error.response?.status === 403) {
+          const backendMessage = error.response?.data?.message;
+          error.message = typeof backendMessage === 'string' && backendMessage.trim()
+            ? backendMessage
+            : FORBIDDEN_MESSAGE;
         }
 
         return Promise.reject(error);

@@ -341,7 +341,8 @@ namespace HoppyRoute.Application.Services
                     EstimatedDurationAtStop = s.EstimatedDurationAtStop,
                     Status = s.Status,
                     ActualArrivalTime = s.ActualArrivalTime,
-                    ActualDepartureTime = s.ActualDepartureTime
+                    ActualDepartureTime = s.ActualDepartureTime,
+                    Notes = s.Notes // manager instructions, set via PUT routestops/{id}/instructions
                 }).OrderBy(s => s.Order).ToList() ?? new List<RouteStopDto>()
             };
         }

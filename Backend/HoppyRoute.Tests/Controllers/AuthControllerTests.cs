@@ -261,6 +261,30 @@ namespace HoppyRoute.Tests.Controllers
         }
 
         [Fact]
+        public async Task GetUsers_SwapperList_AsFleetManager_ReturnsOnlySwappers()
+        {
+            var (_, token) = await TokenForNewUserAsync(UserRole.FleetManager);
+            var (swapperId, _) = await TokenForNewUserAsync(UserRole.BatterySwapper);
+
+            var response = await _client.SendAsync(Request(HttpMethod.Get, "/api/auth/users?role=2", token));
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            var users = await response.Content.ReadFromJsonAsync<List<UserDto>>(Json);
+            users!.Should().Contain(u => u.Id == swapperId);
+            users.Should().OnlyContain(u => u.Role == UserRole.BatterySwapper);
+        }
+
+        [Theory]
+        [InlineData("/api/auth/users")]        // everyone
+        [InlineData("/api/auth/users?role=0")] // admins
+        [InlineData("/api/auth/users?role=1")] // fleet managers
+        public async Task GetUsers_OtherLists_AsFleetManager_Return403(string url)
+        {
+            var (_, token) = await TokenForNewUserAsync(UserRole.FleetManager);
+            (await _client.SendAsync(Request(HttpMethod.Get, url, token))).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        }
+
+        [Fact]
         public async Task GetUsers_AsAdmin_ReturnsUsers()
         {
             var admin = await LoginAsAdminAsync();

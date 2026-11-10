@@ -150,9 +150,14 @@ namespace HoppyRouteApi.Controllers
         /// </summary>
         [HttpPost("{id}/approve")]
         [Authorize(Roles = Roles.Managers)]
-        public async Task<ActionResult<RouteDto>> ApproveRoute(int id, [FromBody] RouteApprovalRequest request)
+        public async Task<ActionResult<RouteDto>> ApproveRoute(int id, [FromBody] RouteApprovalRequest? request = null)
         {
-            var route = await _routeService.ApproveRouteAsync(id, request.ApprovedBy, request.Notes);
+            // The approver is the caller, never a value from the body.
+            var approverId = User.GetUserId();
+            if (approverId == null)
+                return Unauthorized("Gebruiker niet geauthenticeerd");
+
+            var route = await _routeService.ApproveRouteAsync(id, approverId.Value, request?.Notes);
             if (route == null)
                 return NotFound($"Route met ID {id} niet gevonden");
 
@@ -164,9 +169,14 @@ namespace HoppyRouteApi.Controllers
         /// </summary>
         [HttpPost("{id}/reject")]
         [Authorize(Roles = Roles.Managers)]
-        public async Task<ActionResult<RouteDto>> RejectRoute(int id, [FromBody] RouteApprovalRequest request)
+        public async Task<ActionResult<RouteDto>> RejectRoute(int id, [FromBody] RouteApprovalRequest? request = null)
         {
-            var route = await _routeService.RejectRouteAsync(id, request.ApprovedBy, request.Notes);
+            // The approver is the caller, never a value from the body.
+            var approverId = User.GetUserId();
+            if (approverId == null)
+                return Unauthorized("Gebruiker niet geauthenticeerd");
+
+            var route = await _routeService.RejectRouteAsync(id, approverId.Value, request?.Notes);
             if (route == null)
                 return NotFound($"Route met ID {id} niet gevonden");
 

@@ -12,10 +12,12 @@ namespace HoppyRouteApi.Controllers
     public class RoutesController : ControllerBase
     {
         private readonly IRouteService _routeService;
+        private readonly ZoneScopeGuard _zoneScope;
 
-        public RoutesController(IRouteService routeService)
+        public RoutesController(IRouteService routeService, ZoneScopeGuard zoneScope)
         {
             _routeService = routeService;
+            _zoneScope = zoneScope;
         }
 
         /// <summary>
@@ -27,6 +29,10 @@ namespace HoppyRouteApi.Controllers
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
+
+            // A FleetManager only generates routes in their own zone/region.
+            if (!await _zoneScope.CanManageZoneAsync(User, request.ZoneId))
+                return Forbid();
 
             // Krijg de huidige gebruiker ID uit verschillende claim types
             var userIdClaim = User.FindFirst("sub") ?? User.FindFirst(ClaimTypes.NameIdentifier);
@@ -79,13 +85,13 @@ namespace HoppyRouteApi.Controllers
         }
 
         /// <summary>
-        /// Haal alle routes op (voor Admin en FleetManager)
+        /// Haal alle routes op (Admin: alle; FleetManager: alleen de routes in de eigen zone/regio)
         /// </summary>
         [HttpGet("all")]
         [Authorize(Roles = Roles.Managers)]
         public async Task<ActionResult<List<RouteDto>>> GetAllRoutes()
         {
-            var routes = await _routeService.GetAllRoutesAsync();
+            var routes = await _routeService.GetAllRoutesAsync(await _zoneScope.AllowedZoneIdsAsync(User));
             return Ok(routes);
         }
 
@@ -96,8 +102,9 @@ namespace HoppyRouteApi.Controllers
         [Authorize(Roles = Roles.AnyRole)]
         public async Task<ActionResult<RouteDto>> ConfirmRoute(int id)
         {
-            // RoutesScreen shows "Route Bevestigen" to every role; a swapper may only confirm their own route.
-            var denied = await DenyUnlessManagerOrAssignedSwapperAsync(id);
+            // RoutesScreen shows "Route Bevestigen" to every role: Admin any route, a FleetManager routes in
+            // their own zone/region, a swapper only their own route.
+            var denied = await AuthorizeRouteAsync(id, allowAssignedSwapper: true);
             if (denied != null)
                 return denied;
 
@@ -133,7 +140,7 @@ namespace HoppyRouteApi.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<RouteDto>> GetRoute(int id)
         {
-            var denied = await DenyUnlessManagerOrAssignedSwapperAsync(id);
+            var denied = await AuthorizeRouteAsync(id, allowAssignedSwapper: true, scopeFleetManagers: false);
             if (denied != null)
                 return denied;
 
@@ -152,6 +159,10 @@ namespace HoppyRouteApi.Controllers
         [Authorize(Roles = Roles.Managers)]
         public async Task<ActionResult<RouteDto>> ApproveRoute(int id, [FromBody] RouteApprovalRequest? request = null)
         {
+            var denied = await AuthorizeRouteAsync(id, allowAssignedSwapper: false);
+            if (denied != null)
+                return denied;
+
             // The approver is the caller, never a value from the body.
             var approverId = User.GetUserId();
             if (approverId == null)
@@ -171,6 +182,10 @@ namespace HoppyRouteApi.Controllers
         [Authorize(Roles = Roles.Managers)]
         public async Task<ActionResult<RouteDto>> RejectRoute(int id, [FromBody] RouteApprovalRequest? request = null)
         {
+            var denied = await AuthorizeRouteAsync(id, allowAssignedSwapper: false);
+            if (denied != null)
+                return denied;
+
             // The approver is the caller, never a value from the body.
             var approverId = User.GetUserId();
             if (approverId == null)
@@ -190,24 +205,32 @@ namespace HoppyRouteApi.Controllers
         [Authorize(Roles = Roles.Managers)]
         public async Task<ActionResult<List<RouteDto>>> GetRoutesPendingApproval([FromQuery] int? zoneId = null)
         {
-            var routes = await _routeService.GetRoutesPendingApprovalAsync(zoneId);
+            var routes = await _routeService.GetRoutesPendingApprovalAsync(zoneId, await _zoneScope.AllowedZoneIdsAsync(User));
             return Ok(routes);
         }
 
         /// <summary>
-        /// Managers may act on any route. Anyone else only on a route assigned to them:
-        /// 404 when the route does not exist, 403 when it belongs to someone else, null when allowed.
+        /// Who may act on a route: Admin any route; a FleetManager routes in their own zone/region (unless
+        /// <paramref name="scopeFleetManagers"/> is false); a BatterySwapper (when allowed) a route assigned to them.
+        /// 404 when the route does not exist, 403 when not allowed, null when allowed.
         /// </summary>
-        private async Task<ActionResult?> DenyUnlessManagerOrAssignedSwapperAsync(int routeId)
+        private async Task<ActionResult?> AuthorizeRouteAsync(int routeId, bool allowAssignedSwapper, bool scopeFleetManagers = true)
         {
-            if (User.IsManager())
-                return null;
-
-            var ownerId = await _routeService.GetAssignedSwapperIdAsync(routeId);
-            if (ownerId == null)
+            var access = await _routeService.GetAccessInfoAsync(routeId);
+            if (access == null)
                 return NotFound($"Route met ID {routeId} niet gevonden");
 
-            return User.GetUserId() == ownerId ? null : Forbid();
+            if (User.IsInRole(Roles.Admin))
+                return null;
+
+            if (User.IsInRole(Roles.FleetManager))
+            {
+                if (!scopeFleetManagers)
+                    return null;
+                return await _zoneScope.CanManageZoneAsync(User, access.ZoneId) ? null : Forbid();
+            }
+
+            return allowAssignedSwapper && User.GetUserId() == access.AssignedSwapperId ? null : Forbid();
         }
     }
 }

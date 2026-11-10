@@ -12,21 +12,23 @@ namespace HoppyRouteApi.Controllers
     public class RouteStopsController : ControllerBase
     {
         private readonly IRouteStopService _routeStopService;
+        private readonly ZoneScopeGuard _zoneScope;
 
-        public RouteStopsController(IRouteStopService routeStopService)
+        public RouteStopsController(IRouteStopService routeStopService, ZoneScopeGuard zoneScope)
         {
             _routeStopService = routeStopService;
+            _zoneScope = zoneScope;
         }
 
         /// <summary>
         /// Markeer stop voltooid door swapper.
-        /// Admin/FleetManager: any stop. BatterySwapper: only stops on a route assigned to them.
+        /// Admin: any stop. FleetManager: stops in their own zone/region. BatterySwapper: stops on their own route.
         /// </summary>
         [HttpPost("{id}/complete")]
         [Authorize(Roles = Roles.AnyRole)]
         public async Task<ActionResult> CompleteRouteStop(int id)
         {
-            var denied = await DenyUnlessManagerOrAssignedSwapperAsync(id);
+            var denied = await AuthorizeStopAsync(id, allowAssignedSwapper: true);
             if (denied != null)
                 return denied;
 
@@ -42,13 +44,13 @@ namespace HoppyRouteApi.Controllers
         /// Zet een stop op onderweg (InProgress) of overgeslagen (Skipped), bij Skipped met een optionele
         /// reden (max 500 tekens, opgeslagen als SkipReason; bij InProgress is een reden een 400).
         /// Afronden gaat via POST {id}/complete, zodat de tijdstempels kloppen.
-        /// Admin/FleetManager: elke stop. BatterySwapper: alleen stops op een eigen route.
+        /// Admin: elke stop. FleetManager: stops in de eigen zone/regio. BatterySwapper: alleen stops op een eigen route.
         /// </summary>
         [HttpPut("{id}/status")]
         [Authorize(Roles = Roles.AnyRole)]
         public async Task<ActionResult<RouteStopDto>> UpdateStatus(int id, [FromBody] UpdateRouteStopStatusRequest request)
         {
-            var denied = await DenyUnlessManagerOrAssignedSwapperAsync(id);
+            var denied = await AuthorizeStopAsync(id, allowAssignedSwapper: true);
             if (denied != null)
                 return denied;
 
@@ -70,13 +72,17 @@ namespace HoppyRouteApi.Controllers
         }
 
         /// <summary>
-        /// Zet of wis de instructie/opmerking van een stop (max 500 tekens). Alleen Admin/FleetManager;
-        /// swappers lezen ze via het veld "notes" van de route.
+        /// Zet of wis de instructie/opmerking van een stop (max 500 tekens). Admin, of FleetManager voor stops in de
+        /// eigen zone/regio; swappers lezen ze via het veld "notes" van de route.
         /// </summary>
         [HttpPut("{id}/instructions")]
         [Authorize(Roles = Roles.Managers)]
         public async Task<ActionResult<RouteStopDto>> UpdateInstructions(int id, [FromBody] UpdateRouteStopInstructionsRequest request)
         {
+            var denied = await AuthorizeStopAsync(id, allowAssignedSwapper: false);
+            if (denied != null)
+                return denied;
+
             if (!await _routeStopService.AddNotesToRouteStopAsync(id, request.Notes ?? string.Empty))
                 return NotFound($"RouteStop met ID {id} niet gevonden");
 
@@ -85,19 +91,23 @@ namespace HoppyRouteApi.Controllers
         }
 
         /// <summary>
-        /// Managers may act on any stop. A swapper only on a stop of a route assigned to them:
-        /// 404 when the stop does not exist, 403 when the route belongs to someone else, null when allowed.
+        /// Who may act on a stop: Admin any stop; a FleetManager stops whose route is in their zone/region;
+        /// a BatterySwapper (when allowed) stops on a route assigned to them.
+        /// 404 when the stop does not exist, 403 when not allowed, null when allowed.
         /// </summary>
-        private async Task<ActionResult?> DenyUnlessManagerOrAssignedSwapperAsync(int stopId)
+        private async Task<ActionResult?> AuthorizeStopAsync(int stopId, bool allowAssignedSwapper)
         {
-            if (User.IsManager())
-                return null;
-
-            var ownerId = await _routeStopService.GetAssignedSwapperIdForStopAsync(stopId);
-            if (ownerId == null)
+            var access = await _routeStopService.GetAccessInfoForStopAsync(stopId);
+            if (access == null)
                 return NotFound($"RouteStop met ID {stopId} niet gevonden");
 
-            return User.GetUserId() == ownerId ? null : Forbid();
+            if (User.IsInRole(Roles.Admin))
+                return null;
+
+            if (User.IsInRole(Roles.FleetManager))
+                return await _zoneScope.CanManageZoneAsync(User, access.ZoneId) ? null : Forbid();
+
+            return allowAssignedSwapper && User.GetUserId() == access.AssignedSwapperId ? null : Forbid();
         }
     }
 }

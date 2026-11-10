@@ -93,11 +93,12 @@ namespace HoppyRoute.Application.Services
             return MapToRouteStopDto(routeStop);
         }
 
-        public async Task<int?> GetAssignedSwapperIdForStopAsync(int routeStopId)
+        public async Task<RouteAccessInfo?> GetAccessInfoForStopAsync(int routeStopId)
         {
             return await _context.RouteStops
+                .AsNoTracking()
                 .Where(s => s.Id == routeStopId)
-                .Select(s => (int?)s.Route.AssignedSwapperId)
+                .Select(s => new RouteAccessInfo(s.Route.AssignedSwapperId, s.Route.ZoneId))
                 .FirstOrDefaultAsync();
         }
 

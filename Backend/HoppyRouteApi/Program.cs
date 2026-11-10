@@ -64,6 +64,8 @@ builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("Emai
 // Register services
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IZoneScopeService, ZoneScopeService>();
+builder.Services.AddScoped<HoppyRouteApi.Controllers.ZoneScopeGuard>();
 builder.Services.AddScoped<IRouteOptimizationService, HoppyRoute.Application.Services.RouteOptimizationService>();
 builder.Services.AddScoped<IRouteService, HoppyRoute.Application.Services.RouteService>();
 builder.Services.AddScoped<IVehicleService, HoppyRoute.Application.Services.VehicleService>();

@@ -72,12 +72,13 @@ namespace HoppyRoute.Application.Interfaces
         Task<bool> DeleteRouteAsync(int routeId);
         Task<List<RouteDto>> GetRouteSuggestionsAsync(int zoneId);
         Task<List<RouteDto>> GetRoutesForSwapperAsync(int swapperId, int? zoneId = null);
-        Task<List<RouteDto>> GetAllRoutesAsync();
+        /// <param name="zoneIds">When given, only routes in these zones (a FleetManager's scope); null = all.</param>
+        Task<List<RouteDto>> GetAllRoutesAsync(IReadOnlyCollection<int>? zoneIds = null);
         Task<List<RouteDto>> GetRoutesByRegionAsync(int regionId);
         Task<List<RouteDto>> GetRoutesByUserAsync(int userId);
         Task<RouteDto?> GetRouteByIdAsync(int routeId);
-        /// <summary>The swapper a route is assigned to, or null when the route does not exist.</summary>
-        Task<int?> GetAssignedSwapperIdAsync(int routeId);
+        /// <summary>The assigned swapper and the zone of a route, or null when the route does not exist.</summary>
+        Task<RouteAccessInfo?> GetAccessInfoAsync(int routeId);
         Task<RouteDto?> ConfirmRouteAsync(int routeId);
         Task<RouteDto?> StartRouteAsync(int routeId);
         Task<RouteDto?> CompleteRouteAsync(int routeId);
@@ -88,7 +89,9 @@ namespace HoppyRoute.Application.Interfaces
         // Route Approval Methods
         Task<RouteDto?> ApproveRouteAsync(int routeId, int approvedBy, string? notes = null);
         Task<RouteDto?> RejectRouteAsync(int routeId, int approvedBy, string? notes = null);
-        Task<List<RouteDto>> GetRoutesPendingApprovalAsync(int? zoneId = null);
+        /// <param name="zoneId">Optional single-zone filter.</param>
+        /// <param name="allowedZoneIds">When given, only routes in these zones (a FleetManager's scope); null = all.</param>
+        Task<List<RouteDto>> GetRoutesPendingApprovalAsync(int? zoneId = null, IReadOnlyCollection<int>? allowedZoneIds = null);
     }
 
     public interface IVehicleService
@@ -122,9 +125,19 @@ namespace HoppyRoute.Application.Interfaces
         Task<RouteStopDto?> UpdateRouteStopStatusAsync(int routeStopId, RouteStopStatus status, string? reason = null);
         Task<List<RouteStopDto>> GetRouteStopsAsync(int routeId);
         Task<RouteStopDto?> GetRouteStopByIdAsync(int routeStopId);
-        /// <summary>The swapper assigned to the route this stop belongs to, or null when the stop does not exist.</summary>
-        Task<int?> GetAssignedSwapperIdForStopAsync(int routeStopId);
+        /// <summary>The assigned swapper and the zone of the route this stop belongs to, or null when the stop does not exist.</summary>
+        Task<RouteAccessInfo?> GetAccessInfoForStopAsync(int routeStopId);
         Task<bool> AddNotesToRouteStopAsync(int routeStopId, string notes);
+    }
+
+    /// <summary>Which zones a FleetManager may manage, from their zone or region assignment.</summary>
+    public interface IZoneScopeService
+    {
+        /// <summary>
+        /// The zone ids this FleetManager may manage: their assigned zone, else every zone of their assigned
+        /// region, else none. Inactive, unknown and non-FleetManager users get none.
+        /// </summary>
+        Task<IReadOnlyCollection<int>> GetAllowedZoneIdsAsync(int fleetManagerId);
     }
 
     public interface IEmailService

@@ -31,10 +31,10 @@ namespace HoppyRoute.Tests.Controllers
             _client = factory.CreateSeededClient();
         }
 
-        private async Task<(int Id, string Token)> UserAsync(UserRole role)
+        private async Task<(int Id, string Token)> UserAsync(UserRole role, int? zoneId = null)
         {
             var username = $"{role.ToString().ToLowerInvariant()}.{Guid.NewGuid():N}";
-            var id = _factory.SeedUser(role, username, Password);
+            var id = _factory.SeedUser(role, username, Password, zoneId);
             var login = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequestDto { Username = username, Password = Password });
             login.StatusCode.Should().Be(HttpStatusCode.OK);
             return (id, (await login.Content.ReadFromJsonAsync<LoginResponseDto>())!.Token);
@@ -69,6 +69,13 @@ namespace HoppyRoute.Tests.Controllers
             db.RouteStops.Add(stop);
             db.SaveChanges();
             return stop.Id;
+        }
+
+        private int ZoneOf(int stopId)
+        {
+            using var scope = _factory.Services.CreateScope();
+            return scope.ServiceProvider.GetRequiredService<HoppyDbContext>().RouteStops.AsNoTracking()
+                .Where(s => s.Id == stopId).Select(s => s.Route.ZoneId).Single();
         }
 
         private RouteStop ReadStop(int id)
@@ -138,8 +145,8 @@ namespace HoppyRoute.Tests.Controllers
         public async Task Status_FleetManager_CanSkipAnySwappersStop()
         {
             var (swapperId, _) = await UserAsync(UserRole.BatterySwapper);
-            var (_, managerToken) = await UserAsync(UserRole.FleetManager);
             var stopId = SeedStop(swapperId);
+            var (_, managerToken) = await UserAsync(UserRole.FleetManager, ZoneOf(stopId)); // their own zone
 
             (await PutAsync($"/api/routestops/{stopId}/status", managerToken, new { status = Skipped })).StatusCode.Should().Be(HttpStatusCode.OK);
             ReadStop(stopId).Status.Should().Be(RouteStopStatus.Skipped);
@@ -277,8 +284,8 @@ namespace HoppyRoute.Tests.Controllers
         public async Task Instructions_AsManager_SetsAndReturnsTheNote(UserRole role)
         {
             var (swapperId, _) = await UserAsync(UserRole.BatterySwapper);
-            var (_, token) = await UserAsync(role);
             var stopId = SeedStop(swapperId);
+            var (_, token) = await UserAsync(role, ZoneOf(stopId));
 
             var response = await PutAsync($"/api/routestops/{stopId}/instructions", token, new { notes = "test-only note" });
 
@@ -292,8 +299,8 @@ namespace HoppyRoute.Tests.Controllers
         public async Task Instructions_AreVisibleToTheAssignedSwapperOnTheRoute()
         {
             var (swapperId, swapperToken) = await UserAsync(UserRole.BatterySwapper);
-            var (_, managerToken) = await UserAsync(UserRole.FleetManager);
             var stopId = SeedStop(swapperId);
+            var (_, managerToken) = await UserAsync(UserRole.FleetManager, ZoneOf(stopId));
             var routeId = ReadStop(stopId).RouteId;
             (await PutAsync($"/api/routestops/{stopId}/instructions", managerToken, new { notes = "test-only note" })).StatusCode.Should().Be(HttpStatusCode.OK);
 

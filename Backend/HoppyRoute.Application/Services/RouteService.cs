@@ -13,11 +13,12 @@ namespace HoppyRoute.Application.Services
         private readonly HoppyDbContext _context;
         private readonly IRouteOptimizationService _optimizationService;
 
-        public async Task<int?> GetAssignedSwapperIdAsync(int routeId)
+        public async Task<RouteAccessInfo?> GetAccessInfoAsync(int routeId)
         {
             return await _context.Routes
+                .AsNoTracking()
                 .Where(r => r.Id == routeId)
-                .Select(r => (int?)r.AssignedSwapperId)
+                .Select(r => new RouteAccessInfo(r.AssignedSwapperId, r.ZoneId))
                 .FirstOrDefaultAsync();
         }
 
@@ -118,14 +119,22 @@ namespace HoppyRoute.Application.Services
             return routes.Select(MapToRouteDto).ToList();
         }
 
-        public async Task<List<RouteDto>> GetAllRoutesAsync()
+        public async Task<List<RouteDto>> GetAllRoutesAsync(IReadOnlyCollection<int>? zoneIds = null)
         {
-            var routes = await _context.Routes
+            var query = _context.Routes
                 .Include(r => r.AssignedSwapper)
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
                         .ThenInclude(v => v.Zone)
+                .AsQueryable();
+
+            if (zoneIds != null)
+            {
+                query = query.Where(r => zoneIds.Contains(r.ZoneId));
+            }
+
+            var routes = await query
                 .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync();
 
@@ -491,7 +500,7 @@ namespace HoppyRoute.Application.Services
             return MapToRouteDto(route);
         }
 
-        public async Task<List<RouteDto>> GetRoutesPendingApprovalAsync(int? zoneId = null)
+        public async Task<List<RouteDto>> GetRoutesPendingApprovalAsync(int? zoneId = null, IReadOnlyCollection<int>? allowedZoneIds = null)
         {
             var query = _context.Routes
                 .Include(r => r.AssignedSwapper)
@@ -501,6 +510,11 @@ namespace HoppyRoute.Application.Services
             if (zoneId.HasValue)
             {
                 query = query.Where(r => r.ZoneId == zoneId.Value);
+            }
+
+            if (allowedZoneIds != null)
+            {
+                query = query.Where(r => allowedZoneIds.Contains(r.ZoneId));
             }
 
             var routes = await query.ToListAsync();

@@ -334,6 +334,123 @@ namespace HoppyRoute.Tests.Controllers
             await LoginAsAdminAsync(); // the admin was not touched
         }
 
+        // ---- Per-user endpoints: GET users/{id}, deactivate, delete, reset-password ----
+
+        [Theory]
+        [InlineData("GET", "/api/auth/users/{0}")]
+        [InlineData("DELETE", "/api/auth/users/{0}")]
+        [InlineData("DELETE", "/api/auth/users/{0}/permanent")]
+        [InlineData("POST", "/api/auth/users/{0}/reset-password")]
+        public async Task PerUserEndpoints_WithoutToken_Return401(string method, string urlFormat)
+        {
+            var (targetId, _) = await TokenForNewUserAsync(UserRole.BatterySwapper);
+            var response = await _client.SendAsync(Request(new HttpMethod(method), string.Format(urlFormat, targetId), null));
+            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        [Theory]
+        [InlineData("GET", "/api/auth/users/{0}")]
+        [InlineData("DELETE", "/api/auth/users/{0}")]
+        [InlineData("DELETE", "/api/auth/users/{0}/permanent")]
+        [InlineData("POST", "/api/auth/users/{0}/reset-password")]
+        public async Task PerUserEndpoints_AsSwapperOnAnotherUser_Return403_AndChangeNothing(string method, string urlFormat)
+        {
+            var targetUsername = Unique("target");
+            const string targetPassword = "test-only-target-password";
+            var targetId = _factory.SeedUser(UserRole.BatterySwapper, targetUsername, targetPassword);
+            var (_, swapperToken) = await TokenForNewUserAsync(UserRole.BatterySwapper);
+
+            var response = await _client.SendAsync(Request(new HttpMethod(method), string.Format(urlFormat, targetId), swapperToken));
+
+            response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            response.Content.Headers.ContentLength.GetValueOrDefault().Should().Be(0); // no user data, no temp password
+            // Target still exists, is active, and still logs in with the old password.
+            var login = await _client.PostAsJsonAsync("/api/auth/login",
+                new LoginRequestDto { Username = targetUsername, Password = targetPassword });
+            login.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await login.Content.ReadFromJsonAsync<LoginResponseDto>(Json))!.User.IsTemporaryPassword.Should().BeFalse();
+        }
+
+        [Theory]
+        [InlineData("DELETE", "/api/auth/users/{0}")]
+        [InlineData("DELETE", "/api/auth/users/{0}/permanent")]
+        [InlineData("POST", "/api/auth/users/{0}/reset-password")]
+        public async Task AdminOnlyPerUserEndpoints_AsFleetManager_Return403(string method, string urlFormat)
+        {
+            var (targetId, _) = await TokenForNewUserAsync(UserRole.BatterySwapper);
+            var (_, managerToken) = await TokenForNewUserAsync(UserRole.FleetManager);
+            var response = await _client.SendAsync(Request(new HttpMethod(method), string.Format(urlFormat, targetId), managerToken));
+            response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        }
+
+        [Fact]
+        public async Task GetUser_OwnRecord_AsSwapper_ReturnsIt()
+        {
+            var (id, token) = await TokenForNewUserAsync(UserRole.BatterySwapper);
+            var response = await _client.SendAsync(Request(HttpMethod.Get, $"/api/auth/users/{id}", token));
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await response.Content.ReadFromJsonAsync<UserDto>(Json))!.Id.Should().Be(id);
+        }
+
+        [Fact]
+        public async Task GetUser_AsAdmin_ReturnsAnyUser()
+        {
+            var (id, _) = await TokenForNewUserAsync(UserRole.BatterySwapper);
+            var admin = await LoginAsAdminAsync();
+            var response = await _client.SendAsync(Request(HttpMethod.Get, $"/api/auth/users/{id}", admin.Token));
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await response.Content.ReadFromJsonAsync<UserDto>(Json))!.Id.Should().Be(id);
+        }
+
+        [Fact]
+        public async Task DeactivateUser_AsAdmin_DeactivatesTheUser()
+        {
+            var username = Unique("swapper");
+            const string password = "test-only-user-password";
+            var id = _factory.SeedUser(UserRole.BatterySwapper, username, password);
+            var admin = await LoginAsAdminAsync();
+
+            var response = await _client.SendAsync(Request(HttpMethod.Delete, $"/api/auth/users/{id}", admin.Token));
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            var login = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequestDto { Username = username, Password = password });
+            login.StatusCode.Should().Be(HttpStatusCode.Unauthorized); // inactive users cannot log in
+        }
+
+        [Fact]
+        public async Task DeleteUserPermanently_AsAdmin_RemovesTheUser()
+        {
+            var (id, _) = await TokenForNewUserAsync(UserRole.BatterySwapper);
+            var admin = await LoginAsAdminAsync();
+
+            var response = await _client.SendAsync(Request(HttpMethod.Delete, $"/api/auth/users/{id}/permanent", admin.Token));
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            (await _client.SendAsync(Request(HttpMethod.Get, $"/api/auth/users/{id}", admin.Token)))
+                .StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        [Fact]
+        public async Task ResetUserPassword_AsAdmin_IssuesATemporaryPasswordThatLogsIn()
+        {
+            var username = Unique("swapper");
+            const string oldPassword = "test-only-user-password";
+            var id = _factory.SeedUser(UserRole.BatterySwapper, username, oldPassword);
+            var admin = await LoginAsAdminAsync();
+
+            var response = await _client.SendAsync(Request(HttpMethod.Post, $"/api/auth/users/{id}/reset-password", admin.Token));
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var temp = doc.RootElement.GetProperty("temporaryPassword").GetString()!;
+            temp.Should().NotBeNullOrEmpty();
+            await LoginAsync(username, temp);
+            (await _client.PostAsJsonAsync("/api/auth/login", new LoginRequestDto { Username = username, Password = oldPassword }))
+                .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
         [Theory]
         [InlineData(false)]
         [InlineData(true)]

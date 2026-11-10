@@ -84,6 +84,19 @@ namespace HoppyRouteApi.Controllers
         [Authorize]
         public async Task<ActionResult<UserDto>> GetUser(int id)
         {
+            // Admins may read anyone; everyone else only their own record.
+            if (!User.IsInRole(AdminRole))
+            {
+                int callerId;
+                try { callerId = GetCurrentUserId(); }
+                catch (UnauthorizedAccessException ex) { return Unauthorized(new { message = ex.Message }); }
+
+                if (callerId != id)
+                {
+                    return Forbid();
+                }
+            }
+
             try
             {
                 var user = await _authService.GetUserByIdAsync(id);
@@ -206,7 +219,7 @@ namespace HoppyRouteApi.Controllers
         }
 
         [HttpDelete("users/{id}")]
-        [Authorize]
+        [Authorize(Roles = AdminRole)]
         public async Task<ActionResult> DeactivateUser(int id)
         {
             try
@@ -231,7 +244,7 @@ namespace HoppyRouteApi.Controllers
         }
 
         [HttpDelete("users/{id}/permanent")]
-        [Authorize]
+        [Authorize(Roles = AdminRole)]
         public async Task<ActionResult> DeleteUser(int id)
         {
             try
@@ -285,7 +298,7 @@ namespace HoppyRouteApi.Controllers
         }
 
         [HttpPost("users/{id}/reset-password")]
-        [Authorize]
+        [Authorize(Roles = AdminRole)]
         public async Task<ActionResult> ResetUserPassword(int id)
         {
             try

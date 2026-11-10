@@ -79,11 +79,10 @@ namespace HoppyRoute.Application.Services
                     {
                         var fromNode = manager.IndexToNode(previousIndex);
                         var toNode = manager.IndexToNode(index);
-                        totalDistance += await CalculateDistanceAsync(
-                            vehicles[Math.Max(0, fromNode - 1)].Latitude,
-                            vehicles[Math.Max(0, fromNode - 1)].Longitude,
-                            vehicles[Math.Max(0, toNode - 1)].Latitude,
-                            vehicles[Math.Max(0, toNode - 1)].Longitude);
+                        // Node 0 is the depot (centroid), not vehicles[0].
+                        var (fromLat, fromLon) = NodeCoordinates(vehicles, fromNode);
+                        var (toLat, toLon) = NodeCoordinates(vehicles, toNode);
+                        totalDistance += await CalculateDistanceAsync(fromLat, fromLon, toLat, toLon);
                         totalTime += distanceMatrix[fromNode, toNode];
                     }
                 }
@@ -194,6 +193,12 @@ namespace HoppyRoute.Application.Services
 
             return matrix;
         }
+
+        // Same depot definition as CreateDistanceMatrixAsync: node 0 = centroid of all vehicles.
+        private static (double Lat, double Lon) NodeCoordinates(List<Vehicle> vehicles, int node) =>
+            node == 0
+                ? (vehicles.Average(v => v.Latitude), vehicles.Average(v => v.Longitude))
+                : (vehicles[node - 1].Latitude, vehicles[node - 1].Longitude);
 
         private static double ToRadians(double angle)
         {

@@ -1,108 +1,71 @@
-using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Logging;
+using System.Net;
+using System.Net.Sockets;
 using FluentAssertions;
-using HoppyRoute.Application.Services;
 using HoppyRoute.Application.Models;
-using Moq;
-using Xunit;
+using HoppyRoute.Application.Services;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace HoppyRoute.Tests.Services
 {
+    /// <summary>
+    /// Deterministic: never touches a real mail server. "Unreachable" uses a closed port on
+    /// 127.0.0.1, so the result does not depend on the network the tests run on.
+    /// </summary>
     public class EmailServiceTests
     {
-        private readonly Mock<ILogger<EmailService>> _mockLogger;
-        private readonly EmailService _emailService;
-        private readonly EmailSettings _emailSettings;
+        private static EmailService Service(EmailSettings s) => new(Options.Create(s), NullLogger<EmailService>.Instance);
 
-        public EmailServiceTests()
+        private static int ClosedLocalPort()
         {
-            _mockLogger = new Mock<ILogger<EmailService>>();
-            
-            _emailSettings = new EmailSettings
-            {
-                SmtpHost = "smtp.test.com",
-                SmtpPort = 587,
-                SmtpUsername = "test@test.com",
-                SmtpPassword = "testpassword",
-                FromEmail = "noreply@hoppy.com",
-                FromName = "Hoppy Route Test",
-                EnableSsl = true,
-                TimeoutSeconds = 30
-            };
+            var l = new TcpListener(IPAddress.Loopback, 0);
+            l.Start();
+            var port = ((IPEndPoint)l.LocalEndpoint).Port;
+            l.Stop();
+            return port;
+        }
 
-            var mockOptions = new Mock<IOptions<EmailSettings>>();
-            mockOptions.Setup(o => o.Value).Returns(_emailSettings);
+        private static EmailSettings Unreachable() => new()
+        {
+            SmtpHost = "127.0.0.1",
+            SmtpPort = ClosedLocalPort(),
+            SmtpUsername = "test-only-user",
+            SmtpPassword = "test-only-password",
+            FromEmail = "noreply@test.invalid",
+            FromName = "Hoppy Test",
+            EnableSsl = false,
+            TimeoutSeconds = 5
+        };
 
-            _emailService = new EmailService(mockOptions.Object, _mockLogger.Object);
+        [Fact]
+        public async Task TemporaryPasswordEmail_WithoutSmtpConfigured_OnlyLogs_AndReportsSuccess()
+        {
+            var service = Service(new EmailSettings { SmtpHost = "", SmtpUsername = "" });
+
+            var ok = await service.SendTemporaryPasswordEmailAsync("a@test.invalid", "A", "B", "a.b", "Temp123!abcd");
+
+            ok.Should().BeTrue();
         }
 
         [Fact]
-        public void EmailService_Constructor_SetsEmailSettings()
+        public async Task TemporaryPasswordEmail_SmtpUnreachable_ReturnsFalse_WithoutThrowing()
         {
-            // Arrange & Act
-            var mockOptions = new Mock<IOptions<EmailSettings>>();
-            mockOptions.Setup(o => o.Value).Returns(_emailSettings);
-            var service = new EmailService(mockOptions.Object, _mockLogger.Object);
-
-            // Assert
-            service.Should().NotBeNull();
+            var ok = await Service(Unreachable()).SendTemporaryPasswordEmailAsync("a@test.invalid", "A", "B", "a.b", "Temp123!abcd");
+            ok.Should().BeFalse();
         }
 
         [Fact]
-        public async Task SendTemporaryPasswordEmailAsync_ValidParameters_ReturnsTrue()
+        public async Task WelcomeEmail_SmtpUnreachable_ReturnsFalse_WithoutThrowing()
         {
-            // Note: This test will fail in CI/CD because it tries to send a real email
-            // In a real-world scenario, you would mock the SMTP client or use a test email service
-            
-            // Arrange
-            var email = "test@example.com";
-            var firstName = "Test";
-            var lastName = "User";
-            var username = "test.user";
-            var temporaryPassword = "TempPass123!";
-
-            // Act
-            var result = await _emailService.SendTemporaryPasswordEmailAsync(
-                email, firstName, lastName, username, temporaryPassword);
-
-            // Assert
-            // This will likely return false due to invalid SMTP settings in test environment
-            // but we're testing that the method doesn't throw an exception and returns a valid bool
-            result.Should().BeFalse(); // Expected to be false in test environment
+            var ok = await Service(Unreachable()).SendWelcomeEmailAsync("a@test.invalid", "A", "B");
+            ok.Should().BeFalse();
         }
 
         [Fact]
-        public async Task SendWelcomeEmailAsync_ValidParameters_ReturnsTrue()
+        public async Task PasswordResetEmail_SmtpUnreachable_ReturnsFalse_WithoutThrowing()
         {
-            // Arrange
-            var email = "test@example.com";
-            var firstName = "Test";
-            var lastName = "User";
-
-            // Act
-            var result = await _emailService.SendWelcomeEmailAsync(email, firstName, lastName);
-
-            // Assert
-            // This will likely return false due to invalid SMTP settings in test environment
-            // but we're testing that the method doesn't throw an exception and returns a valid bool
-            result.Should().BeFalse(); // Expected to be false in test environment
-        }
-
-        [Fact]
-        public async Task SendPasswordResetEmailAsync_ValidParameters_ReturnsTrue()
-        {
-            // Arrange
-            var email = "test@example.com";
-            var firstName = "Test";
-            var resetLink = "https://app.hoppy.com/reset-password?token=abc123";
-
-            // Act
-            var result = await _emailService.SendPasswordResetEmailAsync(email, firstName, resetLink);
-
-            // Assert
-            // This will likely return false due to invalid SMTP settings in test environment
-            // but we're testing that the method doesn't throw an exception and returns a valid bool
-            result.Should().BeFalse(); // Expected to be false in test environment
+            var ok = await Service(Unreachable()).SendPasswordResetEmailAsync("a@test.invalid", "A", "https://example.invalid/reset?token=test");
+            ok.Should().BeFalse();
         }
     }
 }

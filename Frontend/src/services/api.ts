@@ -64,13 +64,12 @@ interface RouteStopDto {
   status: number; // RouteStopStatus enum
   actualArrivalTime?: string;
   actualDepartureTime?: string;
-  specialInstructions?: string; // Extra instructies voor battery swapper
-  batterySwapNotes?: string; // Specifieke opmerkingen over batterij wissel
+  notes?: string; // Opmerking voor de battery swapper (max 500 tekens)
 }
 
 interface RouteDto {
   id: number;
-  swapperId: number;
+  assignedSwapperId: number;
   swapperName: string;
   zoneId: number;
   zoneName: string;
@@ -218,13 +217,7 @@ class ApiService {
     );
   }
 
-  // Route endpoints (aangepast aan werkelijke backend)
-  async suggestRoute(request: RouteGenerationRequest): Promise<RouteGenerationResponse> {
-    const response: AxiosResponse<RouteGenerationResponse> = await this.api.post('/routes/suggest', request);
-    return response.data;
-  }
-
-  // Route generation methods
+  // Route endpoints
   async generateRoute(request: RouteGenerationRequest): Promise<RouteGenerationResponse> {
     const response: AxiosResponse<RouteGenerationResponse> = await this.api.post('/routes/suggest', request);
     return response.data;
@@ -240,19 +233,8 @@ class ApiService {
     return response.data;
   }
 
-  async getTodaysRoute(swapperId: number): Promise<RouteDto> {
-    const response: AxiosResponse<RouteDto> = await this.api.get(`/routes/today?swapperId=${swapperId}`);
-    return response.data;
-  }
-
   async getRoute(id: number): Promise<RouteDto> {
     const response: AxiosResponse<RouteDto> = await this.api.get(`/routes/${id}`);
-    return response.data;
-  }
-
-  // Additional route methods
-  async getRoutes(): Promise<RouteDto[]> {
-    const response: AxiosResponse<RouteDto[]> = await this.api.get('/routes');
     return response.data;
   }
 
@@ -261,63 +243,14 @@ class ApiService {
     return response.data;
   }
 
-  async createRoute(request: RouteGenerationRequest): Promise<RouteDto> {
-    const response: AxiosResponse<RouteDto> = await this.api.post('/routes', request);
-    return response.data;
-  }
-
-  async updateRoute(id: number, route: Partial<RouteDto>): Promise<RouteDto> {
-    const response: AxiosResponse<RouteDto> = await this.api.put(`/routes/${id}`, route);
-    return response.data;
-  }
-
-  async deleteRoute(id: number): Promise<void> {
-    await this.api.delete(`/routes/${id}`);
-  }
-
-  async optimizeRoute(id: number): Promise<RouteDto> {
-    const response: AxiosResponse<RouteDto> = await this.api.post(`/routes/${id}/optimize`);
-    return response.data;
-  }
-
-  // Route approval endpoints
-  async approveRoute(routeId: number, approvedBy: number, notes?: string): Promise<RouteDto> {
-    const response: AxiosResponse<RouteDto> = await this.api.post(`/routes/${routeId}/approve`, {
-      approvedBy,
-      notes
-    });
-    return response.data;
-  }
-
-  async rejectRoute(routeId: number, approvedBy: number, notes?: string): Promise<RouteDto> {
-    const response: AxiosResponse<RouteDto> = await this.api.post(`/routes/${routeId}/reject`, {
-      approvedBy,
-      notes
-    });
-    return response.data;
-  }
-
-  async getRoutesPendingApproval(zoneId?: number): Promise<RouteDto[]> {
-    const url = zoneId ? `/routes/pending-approval?zoneId=${zoneId}` : '/routes/pending-approval';
-    const response: AxiosResponse<RouteDto[]> = await this.api.get(url);
-    return response.data;
-  }
-
-  // Route stop management
-  async updateRouteStopInstructions(routeId: number, stopId: number, specialInstructions?: string, batterySwapNotes?: string): Promise<RouteStopDto> {
-    const response: AxiosResponse<RouteStopDto> = await this.api.put(`/routes/${routeId}/stops/${stopId}/instructions`, {
-      specialInstructions,
-      batterySwapNotes
-    });
+  // Route stop endpoints (keyed by stop id only, see docs/api-contract.md)
+  // Manager only. `notes` is max 500 characters; an empty string clears it.
+  async updateRouteStopInstructions(stopId: number, notes: string): Promise<RouteStopDto> {
+    const response: AxiosResponse<RouteStopDto> = await this.api.put(`/routestops/${stopId}/instructions`, { notes });
     return response.data;
   }
 
   // Vehicle endpoints (aangepast aan werkelijke backend)
-  async getLowBatteryVehicles(zoneId: number, batteryThreshold: number = 25): Promise<VehicleDto[]> {
-    const response: AxiosResponse<VehicleDto[]> = await this.api.get(`/vehicles/lowbattery?zoneId=${zoneId}&batteryThreshold=${batteryThreshold}`);
-    return response.data;
-  }
-
   async getAllLowBatteryVehicles(batteryThreshold: number = 25): Promise<VehicleDto[]> {
     const response: AxiosResponse<VehicleDto[]> = await this.api.get(`/vehicles/lowbattery/all?batteryThreshold=${batteryThreshold}`);
     return response.data;
@@ -333,48 +266,7 @@ class ApiService {
     return response.data;
   }
 
-  async getVehicleStats(zoneId: number): Promise<any> {
-    const response: AxiosResponse<any> = await this.api.get(`/vehicles/stats/zone/${zoneId}`);
-    return response.data;
-  }
-
-  async getVehicle(id: number): Promise<VehicleDto> {
-    const response: AxiosResponse<VehicleDto> = await this.api.get(`/vehicles/${id}`);
-    return response.data;
-  }
-
-  // Additional vehicle methods
-  async getVehicles(): Promise<VehicleDto[]> {
-    const response: AxiosResponse<VehicleDto[]> = await this.api.get('/vehicles');
-    return response.data;
-  }
-
-  async createVehicle(vehicle: Partial<VehicleDto>): Promise<VehicleDto> {
-    const response: AxiosResponse<VehicleDto> = await this.api.post('/vehicles', vehicle);
-    return response.data;
-  }
-
-  async updateVehicle(id: number, vehicle: Partial<VehicleDto>): Promise<VehicleDto> {
-    const response: AxiosResponse<VehicleDto> = await this.api.put(`/vehicles/${id}`, vehicle);
-    return response.data;
-  }
-
-  async deleteVehicle(id: number): Promise<void> {
-    await this.api.delete(`/vehicles/${id}`);
-  }
-
-  // Zone endpoints (aangepast aan werkelijke backend)
-  async getZonesByCountry(countryCode: string): Promise<ZoneDto[]> {
-    const response: AxiosResponse<ZoneDto[]> = await this.api.get(`/zones/country/${countryCode}`);
-    return response.data;
-  }
-
-  async getZone(id: number): Promise<ZoneDto> {
-    const response: AxiosResponse<ZoneDto> = await this.api.get(`/zones/${id}`);
-    return response.data;
-  }
-
-  // Additional zone methods
+  // Zone endpoints
   async getZones(): Promise<ZoneDto[]> {
     const response: AxiosResponse<ZoneDto[]> = await this.api.get('/zones');
     return response.data;
@@ -396,50 +288,21 @@ class ApiService {
     return response.data;
   }
 
-  async getZonesByRegion(regionId: number): Promise<ZoneDto[]> {
-    const response: AxiosResponse<ZoneDto[]> = await this.api.get(`/regions/${regionId}/zones`);
+  // Accepted values: RouteStopStatus.InProgress (2) and RouteStopStatus.Skipped (4).
+  // Completing goes through completeRouteStop.
+  async updateRouteStopStatus(stopId: number, status: number): Promise<RouteStopDto> {
+    const response: AxiosResponse<RouteStopDto> = await this.api.put(`/routestops/${stopId}/status`, { status });
     return response.data;
   }
 
-  async createZone(zone: Partial<ZoneDto>): Promise<ZoneDto> {
-    const response: AxiosResponse<ZoneDto> = await this.api.post('/zones', zone);
-    return response.data;
-  }
-
-  async updateZone(id: number, zone: Partial<ZoneDto>): Promise<ZoneDto> {
-    const response: AxiosResponse<ZoneDto> = await this.api.put(`/zones/${id}`, zone);
-    return response.data;
-  }
-
-  async deleteZone(id: number): Promise<void> {
-    await this.api.delete(`/zones/${id}`);
-  }
-
-  // RouteStops endpoints (aangepast aan werkelijke backend)
-  async updateRouteStopStatus(routeId: number, stopId: number, status: number): Promise<RouteStopDto> {
-    const response: AxiosResponse<RouteStopDto> = await this.api.put(`/routestops/${routeId}/stops/${stopId}/status`, { status });
-    return response.data;
-  }
-
-  async completeRouteStop(routeId: number, stopId: number): Promise<RouteStopDto> {
-    const response: AxiosResponse<RouteStopDto> = await this.api.post(`/routestops/${routeId}/stops/${stopId}/complete`);
-    return response.data;
-  }
-
-  // Health check endpoint
-  async healthCheck(): Promise<{ status: string; timestamp: string }> {
-    const response: AxiosResponse<{ status: string; timestamp: string }> = await this.api.get('/health');
-    return response.data;
+  // The backend answers { message }, which no caller needs.
+  async completeRouteStop(stopId: number): Promise<void> {
+    await this.api.post(`/routestops/${stopId}/complete`);
   }
 
   // Authentication endpoints
   async login(loginData: LoginRequest): Promise<LoginResponse> {
     const response: AxiosResponse<LoginResponse> = await this.api.post('/auth/login', loginData);
-    return response.data;
-  }
-
-  async getCurrentUser(): Promise<UserDto> {
-    const response: AxiosResponse<UserDto> = await this.api.get('/auth/users/me');
     return response.data;
   }
 

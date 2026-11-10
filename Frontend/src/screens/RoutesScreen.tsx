@@ -19,7 +19,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { HoppyColors, HoppyTheme } from '../theme';
 import { apiService, RouteDto } from '../services/api';
-import { RootStackParamList, BottomTabParamList } from '../types';
+import { RootStackParamList, BottomTabParamList, RouteStatus } from '../types';
 import { HoppyButton, HoppyLogo } from '../components';
 import { useAuth, isAdmin, isFleetManager } from '../contexts/AuthContext';
 import { logApiError } from '../utils/devLog';
@@ -28,15 +28,6 @@ type RoutesScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<BottomTabParamList, 'Routes'>,
   StackNavigationProp<RootStackParamList>
 >;
-
-// Route Status enum (matching backend)
-enum RouteStatus {
-  Suggested = 0,
-  Confirmed = 1,
-  InProgress = 2,
-  Completed = 3,
-  Cancelled = 4
-}
 
 export default function RoutesScreen() {
   const navigation = useNavigation<RoutesScreenNavigationProp>();

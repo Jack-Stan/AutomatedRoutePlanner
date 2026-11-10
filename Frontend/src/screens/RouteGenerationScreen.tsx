@@ -19,14 +19,6 @@ import { HoppyButton } from '../components';
 import { useAuth } from '../contexts/AuthContext';
 import { logApiError } from '../utils/devLog';
 
-// Route Approval Status enum
-enum RouteApprovalStatus {
-  PendingApproval = 0,
-  Approved = 1,
-  Rejected = 2,
-  AutoApproved = 3
-}
-
 // Route Type definitions
 const RouteTypes = {
   battery: {
@@ -96,8 +88,7 @@ export default function RouteGenerationScreen() {
   const [generating, setGenerating] = useState(false);
   const [showStopInstructionsModal, setShowStopInstructionsModal] = useState(false);
   const [selectedStop, setSelectedStop] = useState<RouteStopDto | null>(null);
-  const [stopInstructions, setStopInstructions] = useState('');
-  const [batterySwapNotes, setBatterySwapNotes] = useState('');
+  const [stopNotes, setStopNotes] = useState('');
 
   useEffect(() => {
     loadCountries();
@@ -230,8 +221,7 @@ export default function RouteGenerationScreen() {
 
   const handleStopInstructionsEdit = (stop: RouteStopDto) => {
     setSelectedStop(stop);
-    setStopInstructions(stop.specialInstructions || '');
-    setBatterySwapNotes(stop.batterySwapNotes || '');
+    setStopNotes(stop.notes || '');
     setShowStopInstructionsModal(true);
   };
 
@@ -241,10 +231,8 @@ export default function RouteGenerationScreen() {
     try {
       setLoading(true);
       const updatedStop = await apiService.updateRouteStopInstructions(
-        routePreview.id,
         selectedStop.id,
-        stopInstructions,
-        batterySwapNotes
+        stopNotes.trim()
       );
 
       // Update local state
@@ -605,15 +593,9 @@ export default function RouteGenerationScreen() {
                 Batterij: {item.vehicle.batteryLevel}%
               </Text>
               
-              {item.specialInstructions && (
+              {!!item.notes && (
                 <Text style={styles.stopInstructions}>
-                  Instructies: {item.specialInstructions}
-                </Text>
-              )}
-              
-              {item.batterySwapNotes && (
-                <Text style={styles.stopNotes}>
-                  Batterij opmerkingen: {item.batterySwapNotes}
+                  Opmerking: {item.notes}
                 </Text>
               )}
             </View>
@@ -683,27 +665,17 @@ export default function RouteGenerationScreen() {
             </Text>
 
             <View style={styles.modalInputGroup}>
-              <Text style={styles.modalInputLabel}>Speciale Instructies</Text>
+              <Text style={styles.modalInputLabel}>Opmerking voor de swapper</Text>
               <TextInput
                 style={styles.modalTextInput}
-                value={stopInstructions}
-                onChangeText={setStopInstructions}
-                placeholder="Bijv: Voertuig staat in parkeervak 15"
+                value={stopNotes}
+                onChangeText={setStopNotes}
+                placeholder="Bijv: Voertuig staat in parkeervak 15, batterij is beschadigd"
                 multiline
                 numberOfLines={3}
+                maxLength={500}
               />
-            </View>
-
-            <View style={styles.modalInputGroup}>
-              <Text style={styles.modalInputLabel}>Batterij Wissel Opmerkingen</Text>
-              <TextInput
-                style={styles.modalTextInput}
-                value={batterySwapNotes}
-                onChangeText={setBatterySwapNotes}
-                placeholder="Bijv: Batterij is zwaar beschadigd, extra voorzichtigheid"
-                multiline
-                numberOfLines={3}
-              />
+              <Text style={styles.modalCharCount}>{stopNotes.length}/500</Text>
             </View>
 
             <View style={styles.modalActions}>
@@ -949,12 +921,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 8,
   },
-  stopNotes: {
-    fontSize: 14,
-    color: HoppyColors.warning,
-    fontStyle: 'italic',
-    marginTop: 4,
-  },
   finalizeButton: {
     marginTop: 20,
     marginBottom: 40,
@@ -1012,6 +978,12 @@ const styles = StyleSheet.create({
     backgroundColor: HoppyColors.white,
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  modalCharCount: {
+    fontSize: 12,
+    color: HoppyColors.gray600,
+    textAlign: 'right',
+    marginTop: 4,
   },
   modalActions: {
     flexDirection: 'row',

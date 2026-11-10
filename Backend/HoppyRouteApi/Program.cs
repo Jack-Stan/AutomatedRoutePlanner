@@ -49,6 +49,15 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+// Default-deny: any endpoint without its own [Authorize]/[AllowAnonymous] needs a signed-in user,
+// so a new controller is never anonymous by accident. Public actions opt out with [AllowAnonymous].
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
+
 // Email configuration
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
 

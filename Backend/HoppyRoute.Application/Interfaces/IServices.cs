@@ -76,6 +76,8 @@ namespace HoppyRoute.Application.Interfaces
         Task<List<RouteDto>> GetRoutesByRegionAsync(int regionId);
         Task<List<RouteDto>> GetRoutesByUserAsync(int userId);
         Task<RouteDto?> GetRouteByIdAsync(int routeId);
+        /// <summary>The swapper a route is assigned to, or null when the route does not exist.</summary>
+        Task<int?> GetAssignedSwapperIdAsync(int routeId);
         Task<RouteDto?> ConfirmRouteAsync(int routeId);
         Task<RouteDto?> StartRouteAsync(int routeId);
         Task<RouteDto?> CompleteRouteAsync(int routeId);
@@ -119,6 +121,8 @@ namespace HoppyRoute.Application.Interfaces
         Task<RouteStopDto?> UpdateRouteStopStatusAsync(int routeStopId, RouteStopStatus status);
         Task<List<RouteStopDto>> GetRouteStopsAsync(int routeId);
         Task<RouteStopDto?> GetRouteStopByIdAsync(int routeStopId);
+        /// <summary>The swapper assigned to the route this stop belongs to, or null when the stop does not exist.</summary>
+        Task<int?> GetAssignedSwapperIdForStopAsync(int routeStopId);
         Task<bool> AddNotesToRouteStopAsync(int routeStopId, string notes);
     }
 

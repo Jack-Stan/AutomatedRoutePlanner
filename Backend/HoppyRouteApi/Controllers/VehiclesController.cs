@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using HoppyRoute.Application.DTOs;
 using HoppyRoute.Application.Interfaces;
@@ -6,6 +7,7 @@ namespace HoppyRouteApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize] // read-only controller: any signed-in role (the swapper screens read vehicles and zones too)
     public class VehiclesController : ControllerBase
     {
         private readonly IVehicleService _vehicleService;

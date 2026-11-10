@@ -34,6 +34,7 @@ namespace HoppyRouteApi.Controllers
         }
 
         [HttpPost("login")]
+        [AllowAnonymous]
         public async Task<ActionResult<LoginResponseDto>> Login([FromBody] LoginRequestDto request)
         {
             try
@@ -298,6 +299,7 @@ namespace HoppyRouteApi.Controllers
         }
 
         [HttpPost("validate-token")]
+        [AllowAnonymous]
         public async Task<ActionResult> ValidateToken([FromBody] string token)
         {
             try

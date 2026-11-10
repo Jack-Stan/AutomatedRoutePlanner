@@ -17,6 +17,7 @@ import { HoppyColors, HoppyTheme } from '../theme';
 import { apiService, RouteDto, RouteStopDto, CountryDto, RegionDto, ZoneDto, RouteGenerationRequest, UserDto } from '../services/api';
 import { HoppyButton } from '../components';
 import { useAuth } from '../contexts/AuthContext';
+import { logApiError } from '../utils/devLog';
 
 // Route Approval Status enum
 enum RouteApprovalStatus {
@@ -127,7 +128,7 @@ export default function RouteGenerationScreen() {
         setSelectedSwapper(null);
       }
     } catch (error) {
-      console.error('Error loading swappers:', error);
+      logApiError('Error loading swappers', error);
       Alert.alert('Fout', 'Kon swappers niet laden');
     }
   };
@@ -211,7 +212,6 @@ export default function RouteGenerationScreen() {
         routeType: routeType
       };
 
-      console.log('Sending route generation request:', JSON.stringify(request, null, 2));
 
       const response = await apiService.generateRoute(request);
       

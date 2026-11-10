@@ -19,6 +19,7 @@ import { apiService, VehicleDto } from '../services/api';
 import { RootStackParamList, BottomTabParamList } from '../types';
 import { HoppyButton, HoppyLogo } from '../components';
 import { useAuth } from '../contexts/AuthContext';
+import { logApiError } from '../utils/devLog';
 
 type VehiclesScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<BottomTabParamList, 'Vehicles'>,
@@ -58,7 +59,7 @@ export default function VehiclesScreen() {
       
       setVehicles(vehicleData);
     } catch (err: any) {
-      console.error('Error fetching vehicles:', err);
+      logApiError('Error fetching vehicles', err);
       setError(err.response?.data?.message || err.message || 'Fout bij ophalen van voertuigen');
     } finally {
       setLoading(false);

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using HoppyRoute.Application.DTOs;
 using HoppyRoute.Application.Interfaces;
+using HoppyRoute.Application.Mapping;
 using HoppyRoute.Domain.Enums;
 using HoppyRoute.Infrastructure.Data;
 
@@ -142,21 +143,7 @@ namespace HoppyRoute.Application.Services
                 Notes = routeStop.Notes,
                 Latitude = routeStop.Latitude,
                 Longitude = routeStop.Longitude,
-                Vehicle = new VehicleDto
-                {
-                    Id = routeStop.Vehicle.Id,
-                    ExternalId = routeStop.Vehicle.ExternalId,
-                    RegistrationNumber = routeStop.Vehicle.RegistrationNumber,
-                    VehicleType = routeStop.Vehicle.VehicleType,
-                    ZoneId = routeStop.Vehicle.ZoneId,
-                    ZoneName = routeStop.Vehicle.Zone?.Name,
-                    Latitude = routeStop.Vehicle.Latitude,
-                    Longitude = routeStop.Vehicle.Longitude,
-                    BatteryLevel = routeStop.Vehicle.BatteryLevel,
-                    NeedsBatteryReplacement = routeStop.Vehicle.NeedsBatteryReplacement,
-                    IsAvailable = routeStop.Vehicle.IsAvailable,
-                    LastUpdated = routeStop.Vehicle.LastUpdated
-                }
+                Vehicle = VehicleDtoMapper.ToDto(routeStop.Vehicle)
             };
         }
     }

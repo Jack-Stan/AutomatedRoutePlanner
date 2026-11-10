@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using HoppyRoute.Application.DTOs;
 using HoppyRoute.Application.Interfaces;
+using HoppyRoute.Application.Mapping;
 using HoppyRoute.Domain.Entities;
 using HoppyRoute.Domain.Enums;
 using HoppyRoute.Infrastructure.Data;
@@ -99,6 +100,7 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
                 .Where(r => r.AssignedSwapperId == swapperId && 
                            (r.Status == RouteStatus.Suggested || r.Status == RouteStatus.Confirmed || 
                             r.Status == RouteStatus.InProgress || r.Status == RouteStatus.Completed));
@@ -123,6 +125,7 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
                 .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync();
 
@@ -137,6 +140,7 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
                 .FirstOrDefaultAsync(r => r.AssignedSwapperId == swapperId && r.Date.Date == today);
 
             return route != null ? MapToRouteDto(route) : null;
@@ -224,6 +228,7 @@ namespace HoppyRoute.Application.Services
                     .Include(r => r.Zone)
                     .Include(r => r.Stops)
                         .ThenInclude(s => s.Vehicle)
+                            .ThenInclude(v => v.Zone)
                     .FirstOrDefaultAsync(r => r.Id == route.Id);
 
                 var routeDto = MapToRouteDto(createdRoute!);
@@ -243,6 +248,7 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
                 .Where(r => r.ZoneId == zoneId && (r.Status == RouteStatus.Suggested || r.Status == RouteStatus.Confirmed || r.Status == RouteStatus.InProgress || r.Status == RouteStatus.Completed))
                 .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync();
@@ -257,6 +263,7 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
                 .FirstOrDefaultAsync(r => r.Id == routeId);
 
             return route != null ? MapToRouteDto(route) : null;
@@ -269,6 +276,7 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
                 .FirstOrDefaultAsync(r => r.Id == routeId);
 
             if (route == null || route.Status != RouteStatus.Suggested)
@@ -288,6 +296,7 @@ namespace HoppyRoute.Application.Services
                 .Include(r => r.Zone)
                 .Include(r => r.Stops)
                     .ThenInclude(s => s.Vehicle)
+                        .ThenInclude(v => v.Zone)
                 .Where(r => r.Status == status)
                 .ToListAsync();
 
@@ -326,16 +335,7 @@ namespace HoppyRoute.Application.Services
                     Id = s.Id,
                     RouteId = s.RouteId,
                     VehicleId = s.VehicleId,
-                    Vehicle = s.Vehicle != null ? new VehicleDto
-                    {
-                        Id = s.Vehicle.Id,
-                        ExternalId = s.Vehicle.ExternalId,
-                        ZoneId = s.Vehicle.ZoneId,
-                        Latitude = s.Vehicle.Latitude,
-                        Longitude = s.Vehicle.Longitude,
-                        BatteryLevel = s.Vehicle.BatteryLevel,
-                        LastUpdated = s.Vehicle.LastUpdated
-                    } : new VehicleDto(),
+                    Vehicle = s.Vehicle != null ? VehicleDtoMapper.ToDto(s.Vehicle) : new VehicleDto(),
                     Order = s.Order,
                     EstimatedArrivalOffset = s.EstimatedArrivalOffset,
                     EstimatedDurationAtStop = s.EstimatedDurationAtStop,

@@ -79,7 +79,12 @@ namespace HoppyRouteApi.Controllers
                 return Ok(routes);
             }
             
-            // For other roles, return all routes in zone
+            // A FleetManager only lists routes of their own zone/region. A zone outside it is an empty
+            // list, not a 403: the screens ask for a fixed zone and a 403 makes the app drop the session.
+            if (!await _zoneScope.CanManageZoneAsync(User, zoneId))
+                return Ok(new List<RouteDto>());
+
+            // For the other roles, return all routes in the zone
             var allRoutes = await _routeService.GetRouteSuggestionsAsync(zoneId);
             return Ok(allRoutes);
         }
@@ -131,16 +136,20 @@ namespace HoppyRouteApi.Controllers
             if (route == null)
                 return NotFound($"Geen route gevonden voor swapper {swapperId} vandaag");
 
+            // A FleetManager only sees routes in their own zone/region.
+            if (User.IsInRole(Roles.FleetManager) && !await _zoneScope.CanManageZoneAsync(User, route.ZoneId))
+                return Forbid();
+
             return Ok(route);
         }
 
         /// <summary>
-        /// Haal een specifieke route op
+        /// Haal een specifieke route op (Admin: elke; FleetManager: eigen zone/regio; swapper: eigen route)
         /// </summary>
         [HttpGet("{id}")]
         public async Task<ActionResult<RouteDto>> GetRoute(int id)
         {
-            var denied = await AuthorizeRouteAsync(id, allowAssignedSwapper: true, scopeFleetManagers: false);
+            var denied = await AuthorizeRouteAsync(id, allowAssignedSwapper: true);
             if (denied != null)
                 return denied;
 
@@ -210,11 +219,11 @@ namespace HoppyRouteApi.Controllers
         }
 
         /// <summary>
-        /// Who may act on a route: Admin any route; a FleetManager routes in their own zone/region (unless
-        /// <paramref name="scopeFleetManagers"/> is false); a BatterySwapper (when allowed) a route assigned to them.
+        /// Who may act on a route: Admin any route; a FleetManager routes in their own zone/region;
+        /// a BatterySwapper (when allowed) a route assigned to them.
         /// 404 when the route does not exist, 403 when not allowed, null when allowed.
         /// </summary>
-        private async Task<ActionResult?> AuthorizeRouteAsync(int routeId, bool allowAssignedSwapper, bool scopeFleetManagers = true)
+        private async Task<ActionResult?> AuthorizeRouteAsync(int routeId, bool allowAssignedSwapper)
         {
             var access = await _routeService.GetAccessInfoAsync(routeId);
             if (access == null)
@@ -224,11 +233,7 @@ namespace HoppyRouteApi.Controllers
                 return null;
 
             if (User.IsInRole(Roles.FleetManager))
-            {
-                if (!scopeFleetManagers)
-                    return null;
                 return await _zoneScope.CanManageZoneAsync(User, access.ZoneId) ? null : Forbid();
-            }
 
             return allowAssignedSwapper && User.GetUserId() == access.AssignedSwapperId ? null : Forbid();
         }

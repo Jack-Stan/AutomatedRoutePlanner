@@ -90,7 +90,7 @@ namespace HoppyRoute.Tests.TestSupport
                 AssignedSwapperId = swapperId,
                 CreatedByUserId = 1,
                 ZoneId = zoneId,
-                Date = DateTime.UtcNow.Date,
+                Date = DateTime.Today, // GetTodaysRouteForSwapperAsync compares with DateTime.Today
                 TargetDurationMinutes = 60,
                 Status = routeStatus,
                 ApprovalStatus = approval,

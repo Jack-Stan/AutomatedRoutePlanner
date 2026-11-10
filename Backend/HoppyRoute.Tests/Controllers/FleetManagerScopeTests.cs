@@ -212,6 +212,56 @@ namespace HoppyRoute.Tests.Controllers
             ids.Should().BeEmpty();
         }
 
+        // ================= reads: GET routes/{id}, suggestions, today =================
+
+        [Fact]
+        public async Task GetRoute_InOwnZone_Works_OutsideItIs403_UnknownIs404()
+        {
+            var a = await ArrangeAsync();
+            var (_, token) = await ZoneManagerAsync(_geo.ZoneA1);
+
+            (await SendAsync("GET", $"/api/routes/{a.A1.RouteId}", token)).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await SendAsync("GET", $"/api/routes/{a.A2.RouteId}", token)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await SendAsync("GET", $"/api/routes/{a.B.RouteId}", token)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await SendAsync("GET", "/api/routes/987654", token)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        [Fact]
+        public async Task GetRoute_AsAdmin_IsGlobal_AndAnUnassignedFleetManagerSeesNothing()
+        {
+            var a = await ArrangeAsync();
+            var (_, admin) = await _factory.NewUserAsync(_client, UserRole.Admin);
+            var (_, unassigned) = await _factory.NewUserAsync(_client, UserRole.FleetManager);
+
+            (await SendAsync("GET", $"/api/routes/{a.B.RouteId}", admin)).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await SendAsync("GET", $"/api/routes/{a.B.RouteId}", unassigned)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        }
+
+        [Fact]
+        public async Task Suggestions_ListOnlyOwnZone_AnOtherZoneIsAnEmptyList_NotA403()
+        {
+            var a = await ArrangeAsync();
+            var (_, token) = await ZoneManagerAsync(_geo.ZoneA1);
+            var (_, admin) = await _factory.NewUserAsync(_client, UserRole.Admin);
+
+            (await RouteIdsAsync(await SendAsync("GET", $"/api/routes/suggestions?zoneId={_geo.ZoneA1}", token))).Should().Contain(a.A1.RouteId);
+            (await RouteIdsAsync(await SendAsync("GET", $"/api/routes/suggestions?zoneId={_geo.ZoneB}", token))).Should().BeEmpty();
+            (await RouteIdsAsync(await SendAsync("GET", $"/api/routes/suggestions?zoneId={_geo.ZoneB}", admin))).Should().Contain(a.B.RouteId);
+        }
+
+        [Fact]
+        public async Task TodaysRoute_InOwnZone_Works_OutsideItIs403()
+        {
+            var (swapperA, _) = await _factory.NewUserAsync(_client, UserRole.BatterySwapper);
+            var (swapperB, _) = await _factory.NewUserAsync(_client, UserRole.BatterySwapper);
+            _factory.SeedRoute(swapperA, _geo.ZoneA1, RouteStatus.Confirmed);
+            _factory.SeedRoute(swapperB, _geo.ZoneB, RouteStatus.Confirmed);
+            var (_, token) = await ZoneManagerAsync(_geo.ZoneA1);
+
+            (await SendAsync("GET", $"/api/routes/today?swapperId={swapperA}", token)).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await SendAsync("GET", $"/api/routes/today?swapperId={swapperB}", token)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        }
+
         // ================= no assignment, zone beats region, admin =================
 
         [Fact]

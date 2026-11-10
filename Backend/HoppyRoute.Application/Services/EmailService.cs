@@ -26,20 +26,15 @@ namespace HoppyRoute.Application.Services
                 var subject = "Welkom bij Hoppy Route - Uw tijdelijke inloggegevens";
                 var body = GenerateTemporaryPasswordEmailBody(firstName, lastName, username, temporaryPassword);
 
-                // Log email details for development
-                _logger.LogInformation("=== EMAIL WORDT VERSTUURD ===");
-                _logger.LogInformation("Naar: {Email}", email);
-                _logger.LogInformation("Onderwerp: {Subject}", subject);
-                _logger.LogInformation("Gebruikersnaam: {Username}", username);
-                _logger.LogInformation("Tijdelijk wachtwoord: {Password}", temporaryPassword);
-                _logger.LogInformation("===========================");
+                // Never log the temporary password (or the body, which contains it).
+                _logger.LogInformation("Tijdelijke inloggegevens email voor gebruiker {Username} naar {Email}", username, email);
                 
                 // Check if we have valid SMTP settings before trying to send
                 if (string.IsNullOrEmpty(_emailSettings.SmtpHost) || 
                     string.IsNullOrEmpty(_emailSettings.SmtpUsername) || 
                     _emailSettings.SmtpUsername == "test@gmail.com")
                 {
-                    _logger.LogWarning("SMTP instellingen niet geconfigureerd. Email wordt alleen gelogd.");
+                    _logger.LogWarning("SMTP instellingen niet geconfigureerd. Email wordt niet verzonden.");
                     // Simulate async operation for development
                     await Task.Delay(100);
                     return true;
@@ -62,19 +57,15 @@ namespace HoppyRoute.Application.Services
                 var subject = "Hoppy Route - Wachtwoord Reset";
                 var body = GeneratePasswordResetEmailBody(firstName, resetLink);
 
-                // Log email details for development
-                _logger.LogInformation("=== PASSWORD RESET EMAIL WORDT VERSTUURD ===");
-                _logger.LogInformation("Naar: {Email}", email);
-                _logger.LogInformation("Onderwerp: {Subject}", subject);
-                _logger.LogInformation("Reset Link: {ResetLink}", resetLink);
-                _logger.LogInformation("==========================================");
+                // Never log the reset link: its token is as good as a password until it expires.
+                _logger.LogInformation("Wachtwoord reset email naar {Email}", email);
                 
                 // Check if we have valid SMTP settings before trying to send
                 if (string.IsNullOrEmpty(_emailSettings.SmtpHost) || 
                     string.IsNullOrEmpty(_emailSettings.SmtpUsername) || 
                     _emailSettings.SmtpUsername == "test@gmail.com")
                 {
-                    _logger.LogWarning("SMTP instellingen niet geconfigureerd. Password reset email wordt alleen gelogd.");
+                    _logger.LogWarning("SMTP instellingen niet geconfigureerd. Password reset email wordt niet verzonden.");
                     // Simulate async operation for development
                     await Task.Delay(100);
                     return true;

@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using FluentAssertions;
 using HoppyRoute.Application.Models;
 using HoppyRoute.Application.Services;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -66,6 +67,58 @@ namespace HoppyRoute.Tests.Services
         {
             var ok = await Service(Unreachable()).SendPasswordResetEmailAsync("a@test.invalid", "A", "https://example.invalid/reset?token=test");
             ok.Should().BeFalse();
+        }
+
+        // ---- Credentials never reach the logs ----
+
+        private static EmailSettings NoSmtp() => new() { SmtpHost = "", SmtpUsername = "" };
+
+        [Fact]
+        public async Task TemporaryPasswordEmail_NeverLogsThePassword_ButDoesLogTheUsername()
+        {
+            const string password = "test-only-Temp-Pw-7x9";
+            var logger = new CapturingLogger<EmailService>();
+            var service = new EmailService(Options.Create(NoSmtp()), logger);
+
+            (await service.SendTemporaryPasswordEmailAsync("a@test.invalid", "A", "B", "a.b", password)).Should().BeTrue();
+
+            logger.Messages.Should().NotBeEmpty();
+            logger.Messages.Should().NotContain(m => m.Contains(password));
+            logger.Messages.Should().Contain(m => m.Contains("a.b"));
+        }
+
+        [Fact]
+        public async Task TemporaryPasswordEmail_SmtpFailure_NeverLogsThePassword()
+        {
+            const string password = "test-only-Temp-Pw-7x9";
+            var logger = new CapturingLogger<EmailService>();
+            var service = new EmailService(Options.Create(Unreachable()), logger);
+
+            (await service.SendTemporaryPasswordEmailAsync("a@test.invalid", "A", "B", "a.b", password)).Should().BeFalse();
+
+            logger.Messages.Should().NotContain(m => m.Contains(password));
+        }
+
+        [Fact]
+        public async Task PasswordResetEmail_NeverLogsTheResetToken()
+        {
+            const string token = "test-only-reset-token-abc123";
+            var logger = new CapturingLogger<EmailService>();
+            var service = new EmailService(Options.Create(NoSmtp()), logger);
+
+            (await service.SendPasswordResetEmailAsync("a@test.invalid", "A", $"https://example.invalid/reset?token={token}")).Should().BeTrue();
+
+            logger.Messages.Should().NotBeEmpty();
+            logger.Messages.Should().NotContain(m => m.Contains(token));
+        }
+
+        private sealed class CapturingLogger<T> : ILogger<T>
+        {
+            public List<string> Messages { get; } = new();
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel logLevel) => true;
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+                => Messages.Add(formatter(state, exception) + (exception != null ? " " + exception : ""));
         }
     }
 }

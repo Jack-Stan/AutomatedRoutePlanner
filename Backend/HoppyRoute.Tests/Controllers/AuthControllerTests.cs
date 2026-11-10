@@ -15,8 +15,6 @@ namespace HoppyRoute.Tests.Controllers
     public class AuthControllerTests : IClassFixture<HoppyApiFactory>
     {
         private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
-        private const string KnownBug_OpenUserEndpoints =
-            "KNOWN BUG: AuthController has [Authorize] 'temporarily removed for debugging' on users endpoints; see test report.";
 
         private readonly HoppyApiFactory _factory;
         private readonly HttpClient _client;
@@ -34,6 +32,43 @@ namespace HoppyRoute.Tests.Controllers
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             return (await response.Content.ReadFromJsonAsync<LoginResponseDto>(Json))!;
         }
+
+        private async Task<string> LoginAsync(string username, string password)
+        {
+            var response = await _client.PostAsJsonAsync("/api/auth/login",
+                new LoginRequestDto { Username = username, Password = password });
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            return (await response.Content.ReadFromJsonAsync<LoginResponseDto>(Json))!.Token;
+        }
+
+        private static HttpRequestMessage Request(HttpMethod method, string url, string? token, object? body = null)
+        {
+            var request = new HttpRequestMessage(method, url);
+            if (token != null)
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            if (body != null)
+                request.Content = JsonContent.Create(body);
+            return request;
+        }
+
+        private static string Unique(string prefix) => $"{prefix}.{Guid.NewGuid():N}";
+
+        /// <summary>Seeds a fresh user of the given role and returns a valid token for it.</summary>
+        private async Task<(int Id, string Token)> TokenForNewUserAsync(UserRole role)
+        {
+            var username = Unique(role.ToString().ToLowerInvariant());
+            const string password = "test-only-user-password";
+            var id = _factory.SeedUser(role, username, password);
+            return (id, await LoginAsync(username, password));
+        }
+
+        private static CreateUserRequestDto NewSwapper() => new()
+        {
+            Role = UserRole.BatterySwapper,
+            FirstName = "Jan",
+            LastName = "Peeters",
+            Email = $"{Unique("new")}@test.invalid"
+        };
 
         [Fact]
         public async Task Login_ValidCredentials_ReturnsSignedJwtWithUserClaims()
@@ -112,14 +147,10 @@ namespace HoppyRoute.Tests.Controllers
         [Fact]
         public async Task CreateUser_GeneratesUsername_AndEmailsATemporaryPassword()
         {
-            var email = $"new.{Guid.NewGuid():N}@test.invalid";
-            var response = await _client.PostAsJsonAsync("/api/auth/users", new CreateUserRequestDto
-            {
-                Role = UserRole.BatterySwapper,
-                FirstName = "Jan",
-                LastName = "Peeters",
-                Email = email
-            });
+            var admin = await LoginAsAdminAsync();
+            var dto = NewSwapper();
+            var email = dto.Email;
+            var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/auth/users", admin.Token, dto));
 
             response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
             var created = await response.Content.ReadFromJsonAsync<UserDto>(Json);
@@ -134,20 +165,21 @@ namespace HoppyRoute.Tests.Controllers
         [Fact]
         public async Task CreateUser_DuplicateEmail_Returns400()
         {
-            var response = await _client.PostAsJsonAsync("/api/auth/users", new CreateUserRequestDto
+            var admin = await LoginAsAdminAsync();
+            var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/auth/users", admin.Token, new CreateUserRequestDto
             {
                 Role = UserRole.BatterySwapper,
                 FirstName = "Dup",
                 LastName = "Licate",
                 Email = HoppyApiFactory.AdminEmail
-            });
+            }));
 
             response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         }
 
-        // ---- Known security bugs, kept as tests and skipped so the suite stays honest ----
+        // ---- Authorization on the user-management endpoints ----
 
-        [Fact(Skip = KnownBug_OpenUserEndpoints)]
+        [Fact]
         public async Task CreateUser_WithoutToken_ShouldReturn401()
         {
             var response = await _client.PostAsJsonAsync("/api/auth/users", new CreateUserRequestDto
@@ -160,11 +192,166 @@ namespace HoppyRoute.Tests.Controllers
             response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         }
 
-        [Fact(Skip = KnownBug_OpenUserEndpoints)]
+        [Fact]
         public async Task GetUsers_WithoutToken_ShouldReturn401()
         {
             var response = await _client.GetAsync("/api/auth/users");
             response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        [Theory]
+        [InlineData(UserRole.FleetManager)]
+        [InlineData(UserRole.BatterySwapper)]
+        public async Task CreateUser_AsNonAdmin_Returns403_AndCreatesNothing(UserRole role)
+        {
+            var (_, token) = await TokenForNewUserAsync(role);
+            var dto = NewSwapper();
+            dto.Role = UserRole.Admin;
+
+            var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/auth/users", token, dto));
+
+            response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            var adminToken = (await LoginAsAdminAsync()).Token;
+            var all = await (await _client.SendAsync(Request(HttpMethod.Get, "/api/auth/users", adminToken)))
+                .Content.ReadFromJsonAsync<List<UserDto>>(Json);
+            all!.Should().NotContain(u => u.Email == dto.Email);
+        }
+
+        [Fact]
+        public async Task CreateUser_RecordsTheTokenUserAsCreator_NotAFixedId()
+        {
+            var (secondAdminId, token) = await TokenForNewUserAsync(UserRole.Admin);
+            secondAdminId.Should().NotBe(1);
+            var dto = NewSwapper();
+
+            var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/auth/users", token, dto));
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            _factory.CreatedByUserIdOf(dto.Email).Should().Be(secondAdminId);
+        }
+
+        [Fact]
+        public async Task GetUsers_AsAdmin_ReturnsUsers()
+        {
+            var admin = await LoginAsAdminAsync();
+            var response = await _client.SendAsync(Request(HttpMethod.Get, "/api/auth/users", admin.Token));
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            var users = await response.Content.ReadFromJsonAsync<List<UserDto>>(Json);
+            users!.Should().Contain(u => u.Username == HoppyApiFactory.AdminUsername);
+        }
+
+        [Theory]
+        [InlineData("GET", "/api/auth/users")]
+        [InlineData("GET", "/api/auth/users?role=2")]
+        [InlineData("GET", "/api/auth/users/count")]
+        [InlineData("PUT", "/api/auth/users/1")]
+        public async Task AdminEndpoints_WithoutToken_Return401(string method, string url)
+        {
+            var body = method == "PUT" ? new UpdateUserRequestDto { FirstName = "Hacked" } : null;
+            var response = await _client.SendAsync(Request(new HttpMethod(method), url, null, body));
+            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        [Theory]
+        [InlineData("GET", "/api/auth/users")]
+        [InlineData("GET", "/api/auth/users?role=2")]
+        [InlineData("GET", "/api/auth/users/count")]
+        [InlineData("PUT", "/api/auth/users/1")]
+        public async Task AdminEndpoints_AsBatterySwapper_Return403(string method, string url)
+        {
+            var (_, token) = await TokenForNewUserAsync(UserRole.BatterySwapper);
+            var body = method == "PUT" ? new UpdateUserRequestDto { FirstName = "Hacked" } : null;
+            var response = await _client.SendAsync(Request(new HttpMethod(method), url, token, body));
+            response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        }
+
+        [Fact]
+        public async Task UpdateUser_AsSwapper_CannotPromoteThemselvesToAdmin()
+        {
+            var (id, token) = await TokenForNewUserAsync(UserRole.BatterySwapper);
+            var response = await _client.SendAsync(Request(HttpMethod.Put, $"/api/auth/users/{id}", token,
+                new UpdateUserRequestDto { Role = UserRole.Admin }));
+
+            response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            var adminToken = (await LoginAsAdminAsync()).Token;
+            var user = await (await _client.SendAsync(Request(HttpMethod.Get, $"/api/auth/users/{id}", adminToken)))
+                .Content.ReadFromJsonAsync<UserDto>(Json);
+            user!.Role.Should().Be(UserRole.BatterySwapper);
+        }
+
+        [Fact]
+        public async Task UpdateUser_AsAdmin_UpdatesTheUser()
+        {
+            var (id, _) = await TokenForNewUserAsync(UserRole.BatterySwapper);
+            var admin = await LoginAsAdminAsync();
+
+            var response = await _client.SendAsync(Request(HttpMethod.Put, $"/api/auth/users/{id}", admin.Token,
+                new UpdateUserRequestDto { FirstName = "Renamed" }));
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            (await response.Content.ReadFromJsonAsync<UserDto>(Json))!.FirstName.Should().Be("Renamed");
+        }
+
+        [Fact]
+        public async Task GetUsersCount_AsAdmin_ReturnsCount()
+        {
+            var admin = await LoginAsAdminAsync();
+            var response = await _client.SendAsync(Request(HttpMethod.Get, "/api/auth/users/count", admin.Token));
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            doc.RootElement.GetProperty("count").GetInt32().Should().BeGreaterThan(0);
+        }
+
+        [Fact]
+        public async Task ChangePassword_WithoutToken_Returns401_AndLeavesTheAdminPasswordAlone()
+        {
+            var response = await _client.PostAsJsonAsync("/api/auth/users/change-password", new ChangePasswordRequestDto
+            {
+                CurrentPassword = HoppyApiFactory.AdminPassword,
+                NewPassword = "test-only-attacker-password"
+            });
+
+            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            await LoginAsAdminAsync(); // the old admin password still works
+        }
+
+        [Fact]
+        public async Task ChangePassword_WithToken_ChangesTheCallersOwnPassword()
+        {
+            var username = Unique("swapper");
+            const string oldPassword = "test-only-old-password";
+            const string newPassword = "test-only-new-password";
+            _factory.SeedUser(UserRole.BatterySwapper, username, oldPassword);
+            var token = await LoginAsync(username, oldPassword);
+
+            var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/auth/users/change-password", token,
+                new ChangePasswordRequestDto { CurrentPassword = oldPassword, NewPassword = newPassword }));
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            await LoginAsync(username, newPassword);
+            await LoginAsAdminAsync(); // the admin was not touched
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task TestEmailEndpoint_IsGone(bool asAdmin)
+        {
+            var token = asAdmin ? (await LoginAsAdminAsync()).Token : null;
+            var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/auth/test-email", token, new
+            {
+                email = "victim@test.invalid",
+                firstName = "A",
+                lastName = "B",
+                username = "x",
+                temporaryPassword = "test-only"
+            }));
+
+            response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+            _factory.EmailService.Verify(e => e.SendTemporaryPasswordEmailAsync(
+                "victim@test.invalid", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }
     }
 }

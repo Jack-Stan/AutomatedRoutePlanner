@@ -644,19 +644,6 @@ namespace HoppyRoute.Application.Services
             }
         }
 
-        public async Task<bool> TestEmailAsync(string email, string firstName, string lastName, string username, string temporaryPassword)
-        {
-            try
-            {
-                return await _emailService.SendTemporaryPasswordEmailAsync(email, firstName, lastName, username, temporaryPassword);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Test email failed: {ex.Message}");
-                return false;
-            }
-        }
-
         public async Task<bool> AssignUserToRegionAsync(int userId, int regionId)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);

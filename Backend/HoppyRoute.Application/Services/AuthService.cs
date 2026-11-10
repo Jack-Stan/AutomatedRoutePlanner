@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using BCrypt.Net;
 using HoppyRoute.Application.DTOs;
+using HoppyRoute.Application.Exceptions;
 using HoppyRoute.Application.Interfaces;
 using HoppyRoute.Domain.Entities;
 using HoppyRoute.Domain.Enums;
@@ -86,6 +87,12 @@ namespace HoppyRoute.Application.Services
             if (createdByUser.Role != UserRole.Admin)
             {
                 throw new UnauthorizedAccessException("Alleen administrators kunnen gebruikers aanmaken");
+            }
+
+            // Which roles this creator may hand out. Admins are never created through the API.
+            if (!CanCreateUser(createdByUser.Role, request.Role))
+            {
+                throw new ForbiddenOperationException($"Je mag geen gebruiker met rol {request.Role} aanmaken");
             }
 
             // Check if email already exists
@@ -245,7 +252,7 @@ namespace HoppyRoute.Application.Services
 
             if (!VerifyPassword(request.CurrentPassword, user.PasswordHash))
             {
-                throw new UnauthorizedAccessException("Huidig wachtwoord is onjuist");
+                throw new InvalidCurrentPasswordException("Huidig wachtwoord is onjuist");
             }
 
             user.PasswordHash = HashPassword(request.NewPassword);
@@ -401,7 +408,7 @@ namespace HoppyRoute.Application.Services
         {
             return creatorRole switch
             {
-                UserRole.Admin => targetRole == UserRole.FleetManager,
+                UserRole.Admin => targetRole is UserRole.FleetManager or UserRole.BatterySwapper,
                 UserRole.FleetManager => targetRole == UserRole.BatterySwapper,
                 _ => false
             };

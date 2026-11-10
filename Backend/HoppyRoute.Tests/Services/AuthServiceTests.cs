@@ -1,5 +1,6 @@
 using FluentAssertions;
 using HoppyRoute.Application.DTOs;
+using HoppyRoute.Application.Exceptions;
 using HoppyRoute.Application.Interfaces;
 using HoppyRoute.Application.Services;
 using HoppyRoute.Domain.Entities;
@@ -174,7 +175,7 @@ namespace HoppyRoute.Tests.Services
 
             var act = () => _auth.ChangePasswordAsync(user.Id, new ChangePasswordRequestDto { CurrentPassword = "nope", NewPassword = "x" });
 
-            await act.Should().ThrowAsync<UnauthorizedAccessException>();
+            await act.Should().ThrowAsync<InvalidCurrentPasswordException>();
             BCrypt.Net.BCrypt.Verify("correct-horse", (await _db.Users.FindAsync(user.Id))!.PasswordHash).Should().BeTrue();
         }
 
@@ -222,6 +223,25 @@ namespace HoppyRoute.Tests.Services
             var planner = await AddUserAsync("fleetmanager", "pw", UserRole.FleetManager);
             var act = () => _auth.CreateUserAsync(new CreateUserRequestDto { FirstName = "A", LastName = "B", Email = "ab@test.invalid", Role = UserRole.BatterySwapper }, planner.Id);
             await act.Should().ThrowAsync<UnauthorizedAccessException>();
+        }
+
+        [Fact]
+        public async Task CreateUser_AdminCannotCreateAnotherAdmin()
+        {
+            var admin = await AddUserAsync("admin2", "pw", UserRole.Admin);
+            var act = () => _auth.CreateUserAsync(new CreateUserRequestDto { FirstName = "A", LastName = "B", Email = "new-admin@test.invalid", Role = UserRole.Admin }, admin.Id);
+            await act.Should().ThrowAsync<ForbiddenOperationException>();
+            _db.Users.Should().NotContain(u => u.Email == "new-admin@test.invalid");
+        }
+
+        [Theory]
+        [InlineData(UserRole.FleetManager)]
+        [InlineData(UserRole.BatterySwapper)]
+        public async Task CreateUser_AdminCanCreateFleetManagersAndSwappers(UserRole role)
+        {
+            var admin = await AddUserAsync($"admin-{role}", "pw", UserRole.Admin);
+            var created = await _auth.CreateUserAsync(new CreateUserRequestDto { FirstName = "A", LastName = "B", Email = $"{role}@test.invalid", Role = role }, admin.Id);
+            created.Role.Should().Be(role);
         }
 
         [Fact]

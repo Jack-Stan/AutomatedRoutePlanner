@@ -231,6 +231,36 @@ namespace HoppyRoute.Tests.Controllers
         }
 
         [Fact]
+        public async Task CreateUser_AdminRole_AsAdmin_Returns403_AndCreatesNothing()
+        {
+            var admin = await LoginAsAdminAsync();
+            var dto = NewSwapper();
+            dto.Role = UserRole.Admin;
+
+            var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/auth/users", admin.Token, dto));
+
+            response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            var all = await (await _client.SendAsync(Request(HttpMethod.Get, "/api/auth/users", admin.Token)))
+                .Content.ReadFromJsonAsync<List<UserDto>>(Json);
+            all!.Should().NotContain(u => u.Email == dto.Email);
+            _factory.EmailService.Verify(e => e.SendTemporaryPasswordEmailAsync(
+                dto.Email, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task CreateUser_FleetManager_AsAdmin_Succeeds()
+        {
+            var admin = await LoginAsAdminAsync();
+            var dto = NewSwapper();
+            dto.Role = UserRole.FleetManager;
+
+            var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/auth/users", admin.Token, dto));
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            (await response.Content.ReadFromJsonAsync<UserDto>(Json))!.Role.Should().Be(UserRole.FleetManager);
+        }
+
+        [Fact]
         public async Task GetUsers_AsAdmin_ReturnsUsers()
         {
             var admin = await LoginAsAdminAsync();
@@ -449,6 +479,25 @@ namespace HoppyRoute.Tests.Controllers
             await LoginAsync(username, temp);
             (await _client.PostAsJsonAsync("/api/auth/login", new LoginRequestDto { Username = username, Password = oldPassword }))
                 .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        [Fact]
+        public async Task ChangePassword_WrongCurrentPassword_Returns400_WithMessage_AndKeepsThePassword()
+        {
+            var username = Unique("swapper");
+            const string password = "test-only-user-password";
+            _factory.SeedUser(UserRole.BatterySwapper, username, password);
+            var token = await LoginAsync(username, password);
+
+            var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/auth/users/change-password", token,
+                new ChangePasswordRequestDto { CurrentPassword = "test-only-wrong-password", NewPassword = "test-only-new-password" }));
+
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            doc.RootElement.GetProperty("message").GetString().Should().Be("Huidig wachtwoord is onjuist");
+            await LoginAsync(username, password); // unchanged
+            // The token is still good: the user is not "logged out" by this.
+            (await _client.SendAsync(Request(HttpMethod.Get, "/api/auth/users/me", token))).StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         [Theory]

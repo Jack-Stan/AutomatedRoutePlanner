@@ -9,10 +9,12 @@ namespace HoppyRouteApi.Controllers
     public class ZonesController : ControllerBase
     {
         private readonly IZoneService _zoneService;
+        private readonly ILogger<ZonesController> _logger;
 
-        public ZonesController(IZoneService zoneService)
+        public ZonesController(IZoneService zoneService, ILogger<ZonesController> logger)
         {
             _zoneService = zoneService;
+            _logger = logger;
         }
 
         /// <summary>
@@ -49,8 +51,9 @@ namespace HoppyRouteApi.Controllers
                 var zones = await _zoneService.GetAllZonesAsync();
                 return Ok(new { count = zones.Count });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Onverwachte fout bij het ophalen van het aantal zones");
                 return StatusCode(500, new { message = "Er is een fout opgetreden bij het ophalen van zones aantal" });
             }
         }

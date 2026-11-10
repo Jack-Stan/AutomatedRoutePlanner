@@ -23,6 +23,7 @@ import { RootStackParamList, BottomTabParamList, RouteStatus } from '../types';
 import { HoppyButton, HoppyLogo } from '../components';
 import { useAuth, isAdmin, isFleetManager } from '../contexts/AuthContext';
 import { logApiError } from '../utils/devLog';
+import { getApiErrorMessage } from '../utils/apiError';
 
 type RoutesScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<BottomTabParamList, 'Routes'>,
@@ -65,16 +66,7 @@ export default function RoutesScreen() {
     } catch (err: any) {
       logApiError('Error fetching routes', err);
       
-      let errorMessage = 'Fout bij ophalen van routes';
-      if (err.response?.status === 403) {
-        errorMessage = 'Geen toegang tot routes. Log uit en opnieuw in om uw toegang te vernieuwen.';
-      } else if (err.response?.data?.message) {
-        errorMessage = err.response.data.message;
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-      
-      setError(errorMessage);
+      setError(getApiErrorMessage(err, err.message || 'Fout bij ophalen van routes'));
     } finally {
       setLoading(false);
     }
@@ -149,7 +141,7 @@ export default function RoutesScreen() {
         { text: 'OK', onPress: fetchRoutes }
       ]);
     } catch (err: any) {
-      Alert.alert('Fout', err.response?.data?.message || 'Fout bij bevestigen van route');
+      Alert.alert('Fout', getApiErrorMessage(err, 'Fout bij bevestigen van route'));
     }
   };
 

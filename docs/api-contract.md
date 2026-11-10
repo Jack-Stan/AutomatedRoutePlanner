@@ -149,7 +149,7 @@ The frontend disagrees in four places (frontend work list, section 5).
 
 - Stop status and instructions endpoints (new), rules above.
 - Zone scoping for FleetManagers (section 7) on the route and stop endpoints above.
-- `GET /auth/users?role=2` opened to FleetManager. Before that, RouteGenerationScreen (Admin and FleetManager) got a 403 for a FleetManager, and `api.ts` clears the stored session on a 403. This is in its own commit so it can be reverted on its own.
+- `GET /auth/users?role=2` opened to FleetManager. Before that, RouteGenerationScreen (Admin and FleetManager) got a 403 for a FleetManager, and `api.ts` then cleared the stored session on a 403 (fixed since, see section 5 item 7). This is in its own commit so it can be reverted on its own.
 
 ## 5. Frontend work list (AOIFE)
 
@@ -164,8 +164,9 @@ Status: **all six items done** on branch `fix/frontend-contract`. Verified with 
    - `RouteApprovalStatus` in `RouteGenerationScreen.tsx`: 3 is `RequiresChanges`, not `AutoApproved`.
 5. **Done.** Delete the 25 dead methods from `api.ts`: suggestRoute, getTodaysRoute, getRoutes, createRoute, updateRoute, deleteRoute, optimizeRoute, approveRoute, rejectRoute, getRoutesPendingApproval, getLowBatteryVehicles, getVehicleStats, getVehicle, getVehicles, createVehicle, updateVehicle, deleteVehicle, getZonesByCountry, getZone, getZonesByRegion, createZone, updateZone, deleteZone, healthCheck, getCurrentUser. Then the Redux slices that call them (`routesSlice`, `vehiclesSlice`, `zonesSlice`) have no callers left; the store, `store/hooks.ts`, the `Provider` in `App.tsx` and the `@reduxjs/toolkit` and `react-redux` dependencies are removed as well (nothing dispatched or selected).
 6. **Done.** `RouteDto` interface: the backend field is `assignedSwapperId`, not `swapperId` (no screen reads it; `swapperName` still works through a compatibility property).
+7. **Done.** A **403 no longer logs the user out.** The response interceptor in `api.ts` clears the stored token and user and calls the logout callback on a **401 only** (`AuthContext` registers that callback, so the navigator goes to login). A 403 leaves the session alone and rejects with the backend's `message`, or "Je hebt geen toegang tot deze actie" when it sent none. Screens read it through `getApiErrorMessage` in `Frontend/src/utils/apiError.ts` and show it in their existing Alert or error state: RouteDetails (load, complete, skip), Routes (load, confirm) and RouteGeneration (countries, swappers, zones, generate, save note). There is no approve or reject UI in the frontend.
 
-Still needs a real device or emulator (no Expo here): the swapper's "Swap Voltooid" and "Probleem Melden" buttons now rendering on Pending (1) stops, complete and skip round trips, the merged notes modal (500 character limit, counter) and `notes` showing on RouteDetails and in the RouteGen preview, and a fresh `npm install` without the Redux packages.
+Still needs a real device or emulator (no Expo here): the swapper's "Swap Voltooid" and "Probleem Melden" buttons now rendering on Pending (1) stops, complete and skip round trips, the merged notes modal (500 character limit, counter) and `notes` showing on RouteDetails and in the RouteGen preview, and a fresh `npm install` without the Redux packages. For item 7: a FleetManager opening a route outside their zone should see the message and stay logged in; an expired token should land on the login screen.
 
 ## 6. Done since (leftovers)
 
@@ -185,7 +186,7 @@ Admins are global. Inactive, unknown and non-FleetManager users have no scope.
 
 Enforced (403 out of scope, 404 unknown id): `POST /routes/suggest` (body `zoneId`), `POST /routes/{id}/approve|reject|confirm`, `POST /routestops/{id}/complete`, `PUT /routestops/{id}/status|instructions`, `GET /routes/{id}`, `GET /routes/today`.
 
-Lists (empty 200, never a 403): `GET /routes/all`, `GET /routes/pending-approval` (a `zoneId` filter outside the scope is also empty) and `GET /routes/suggestions?zoneId=` for a zone outside the scope. The empty list matters because `DashboardScreen` and `RoutesScreen` call `suggestions` with a hard-coded zone (2) and `api.ts` clears the stored session on any 403.
+Lists (empty 200, never a 403): `GET /routes/all`, `GET /routes/pending-approval` (a `zoneId` filter outside the scope is also empty) and `GET /routes/suggestions?zoneId=` for a zone outside the scope. The empty list matters because `DashboardScreen` and `RoutesScreen` call `suggestions` with a hard-coded zone (2). A 403 no longer logs the user out (section 5 item 7), but an empty list is still friendlier than an error on those screens.
 
 Not scoped: `GET /auth/users?role=2` (the swapper list) and the vehicle, zone and region reads, because swappers are not required to have an assignment and a scoped list would leave a FleetManager unable to assign anyone.
 
@@ -203,7 +204,7 @@ It is idempotent (a fresh database already has the column) and needs `ALTER` per
 ## 9. Not done, listed for Stan
 
 - **Unassigned FleetManagers are locked out** of route management until an admin gives them a zone or region (section 7). Existing FleetManagers created without an assignment are affected.
-- **`api.ts` clears the stored session on any 403** (as well as 401). Role and scope 403s are normal answers now, so a stray out-of-scope call logs the user out. Clearing on 401 only would be safer. This is frontend work.
+- ~~`api.ts` clears the stored session on any 403.~~ Done, see section 5 item 7: only a 401 clears the session now.
 - The swapper list `GET /auth/users?role=2` is not zone-scoped (see section 7).
 - Zone and region assignment is not validated against each other: a FleetManager can have a zone outside their region; the zone wins.
 - VehiclesScreen and VehicleDetailsScreen have a "Swap voltooid" button that only shows an alert (`// In a real app, this would update the vehicle's battery level`). There is no API call, so no endpoint was built. Whether a swap outside a route should exist, and who may do it, is a design question.

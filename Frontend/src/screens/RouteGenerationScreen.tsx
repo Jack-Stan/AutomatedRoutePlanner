@@ -18,6 +18,7 @@ import { apiService, RouteDto, RouteStopDto, CountryDto, RegionDto, ZoneDto, Rou
 import { HoppyButton } from '../components';
 import { useAuth } from '../contexts/AuthContext';
 import { logApiError } from '../utils/devLog';
+import { getApiErrorMessage } from '../utils/apiError';
 
 // Route Type definitions
 const RouteTypes = {
@@ -101,7 +102,8 @@ export default function RouteGenerationScreen() {
       const countriesData = await apiService.getCountries();
       setCountries(countriesData);
     } catch (error) {
-      Alert.alert('Fout', 'Kon landen niet laden');
+      logApiError('Error loading countries', error);
+      Alert.alert('Fout', getApiErrorMessage(error, 'Kon landen niet laden'));
     } finally {
       setLoading(false);
     }
@@ -120,7 +122,7 @@ export default function RouteGenerationScreen() {
       }
     } catch (error) {
       logApiError('Error loading swappers', error);
-      Alert.alert('Fout', 'Kon swappers niet laden');
+      Alert.alert('Fout', getApiErrorMessage(error, 'Kon swappers niet laden'));
     }
   };
 
@@ -143,7 +145,8 @@ export default function RouteGenerationScreen() {
       setZones(allZones);
       setCurrentStep(2); // Go directly to zone selection
     } catch (error) {
-      Alert.alert('Fout', 'Kon zones niet laden');
+      logApiError('Error loading zones', error);
+      Alert.alert('Fout', getApiErrorMessage(error, 'Kon zones niet laden'));
     } finally {
       setLoading(false);
     }
@@ -213,7 +216,8 @@ export default function RouteGenerationScreen() {
         Alert.alert('Fout', response.message || 'Kon route niet genereren');
       }
     } catch (error: any) {
-      Alert.alert('Fout', error.message || 'Er is een fout opgetreden bij het genereren van de route');
+      logApiError('Error generating route', error);
+      Alert.alert('Fout', getApiErrorMessage(error, 'Er is een fout opgetreden bij het genereren van de route'));
     } finally {
       setGenerating(false);
     }
@@ -244,7 +248,8 @@ export default function RouteGenerationScreen() {
       setShowStopInstructionsModal(false);
       setSelectedStop(null);
     } catch (error) {
-      Alert.alert('Fout', 'Kon instructies niet opslaan');
+      logApiError('Error saving stop notes', error);
+      Alert.alert('Fout', getApiErrorMessage(error, 'Kon instructies niet opslaan'));
     } finally {
       setLoading(false);
     }

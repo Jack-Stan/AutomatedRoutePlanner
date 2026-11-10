@@ -44,6 +44,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     checkAuthStatus();
   }, []);
 
+  // The API service clears storage on a 401; this drops the in-memory user so
+  // the navigator shows the login screen. A 403 never gets here.
+  useEffect(() => {
+    apiService.setAuthLogoutCallback(() => setUser(null));
+  }, []);
+
   const checkAuthStatus = async () => {
     try {
       const token = await AsyncStorage.getItem('authToken');
